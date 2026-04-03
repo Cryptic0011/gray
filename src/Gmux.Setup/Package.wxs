@@ -1,0 +1,38 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="gray"
+    Manufacturer="$(ProductManufacturer)"
+    Version="$(ProductVersion)"
+    UpgradeCode="{93145B6B-25F3-4A1D-9004-BD86C9A7A2D2}">
+    <SummaryInformation Description="gray installer" Manufacturer="$(ProductManufacturer)" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="gray">
+        <Directory Id="CLIFOLDER" Name="cli" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="gray" Level="1">
+      <ComponentGroupRef Id="AppPayloadComponents" />
+      <ComponentGroupRef Id="CliPayloadComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="AppPayloadComponents" Directory="INSTALLFOLDER">
+      <Files Include="$(AppPublishDir)\**">
+        <Exclude Files="$(AppPublishDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="CliPayloadComponents" Directory="CLIFOLDER">
+      <Files Include="$(CliPublishDir)\**">
+        <Exclude Files="$(CliPublishDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

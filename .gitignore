@@ -38,3 +38,7 @@ BundleArtifacts/
 *.idea/
 .vscode/
 *.code-workspace
+
+## Local packaging output
+artifacts/
+dist/

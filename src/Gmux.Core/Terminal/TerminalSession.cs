@@ -1,6 +1,7 @@
 using Gmux.Core.Terminal.ConPty;
 using Gmux.Core.Terminal.VtParser;
 using Microsoft.Win32.SafeHandles;
+using System.Globalization;
 
 namespace Gmux.Core.Terminal;
 
@@ -16,6 +17,7 @@ public class TerminalSession : IDisposable
     private FileStream? _inputStream;
     private CancellationTokenSource? _readCts;
     private bool _disposed;
+    private readonly System.Text.StringBuilder _sanitizedOutput = new(4096);
 
     public TerminalBuffer Buffer { get; }
     public string? WorkingDirectory { get; private set; }
@@ -72,7 +74,8 @@ public class TerminalSession : IDisposable
 
                 // Decode UTF-8 bytes to chars, handling multi-byte sequences across reads
                 int charsDecoded = decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0);
-                _parser.ProcessChars(charBuffer.AsSpan(0, charsDecoded));
+                var sanitized = SanitizeTerminalOutput(charBuffer.AsSpan(0, charsDecoded));
+                _parser.ProcessText(sanitized);
                 OutputChanged?.Invoke(this);
             }
         }
@@ -114,6 +117,55 @@ public class TerminalSession : IDisposable
     {
         Buffer.Resize(columns, rows);
         _console?.Resize((short)columns, (short)rows);
+    }
+
+    private string SanitizeTerminalOutput(ReadOnlySpan<char> chars)
+    {
+        _sanitizedOutput.Clear();
+
+        for (int i = 0; i < chars.Length; i++)
+        {
+            char ch = chars[i];
+
+            if (char.IsHighSurrogate(ch))
+            {
+                if (i + 1 < chars.Length && char.IsLowSurrogate(chars[i + 1]))
+                {
+                    // The renderer/buffer are single-cell and cannot represent surrogate pairs.
+                    // Replace the full pair with a plain space to avoid stray glyphs.
+                    _sanitizedOutput.Append(' ');
+                    i++;
+                    continue;
+                }
+
+                _sanitizedOutput.Append(' ');
+                continue;
+            }
+
+            if (char.IsLowSurrogate(ch))
+            {
+                _sanitizedOutput.Append(' ');
+                continue;
+            }
+
+            var category = char.GetUnicodeCategory(ch);
+            if (category is UnicodeCategory.NonSpacingMark
+                or UnicodeCategory.SpacingCombiningMark
+                or UnicodeCategory.EnclosingMark
+                or UnicodeCategory.Format)
+            {
+                continue;
+            }
+
+            if (char.IsControl(ch) && ch is not ('\r' or '\n' or '\b' or '\t' or '\x1b' or '\a'))
+            {
+                continue;
+            }
+
+            _sanitizedOutput.Append(ch);
+        }
+
+        return _sanitizedOutput.ToString();
     }
 
     public void Dispose()
