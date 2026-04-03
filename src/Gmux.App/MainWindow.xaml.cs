@@ -102,7 +102,11 @@ public sealed partial class MainWindow : Window
         {
             // Inherit working directory from the source pane
             var sourceDir = _sessionManager.GetWorkingDirectory(paneId) ?? workspace.WorkingDirectory;
-            _sessionManager.ConfigurePendingPane(newId.Value, sourceDir, App.SettingsManager.Current.GetEnabledAgentClis());
+            _sessionManager.ConfigurePendingPane(
+                newId.Value,
+                sourceDir,
+                App.SettingsManager.Current.GetEnabledAgentClis(),
+                showChooserWhenMultipleEnabled: true);
             _focusManager.SetFocus(newId.Value);
         }
     }
@@ -116,7 +120,11 @@ public sealed partial class MainWindow : Window
         if (newId.HasValue)
         {
             var sourceDir = _sessionManager.GetWorkingDirectory(paneId) ?? workspace.WorkingDirectory;
-            _sessionManager.ConfigurePendingPane(newId.Value, sourceDir, App.SettingsManager.Current.GetEnabledAgentClis());
+            _sessionManager.ConfigurePendingPane(
+                newId.Value,
+                sourceDir,
+                App.SettingsManager.Current.GetEnabledAgentClis(),
+                showChooserWhenMultipleEnabled: true);
             _focusManager.SetFocus(newId.Value);
         }
     }
@@ -139,7 +147,8 @@ public sealed partial class MainWindow : Window
         var workspace = App.WorkspaceManager.ActiveWorkspace;
         if (workspace == null) return;
 
-        // Inherit CWD from the focused pane and auto-launch Claude in the new tab
+        // Inherit CWD from the focused pane. When multiple agents are enabled,
+        // new tabs should let the user choose which agent to launch.
         string sourceDir = workspace.WorkingDirectory;
         if (_focusManager.FocusedPaneId.HasValue)
             sourceDir = _sessionManager.GetWorkingDirectory(_focusManager.FocusedPaneId.Value) ?? sourceDir;
@@ -151,7 +160,11 @@ public sealed partial class MainWindow : Window
         {
             var newPaneId = tab.RootSplit.GetAllPaneIds().FirstOrDefault();
             if (newPaneId != default)
-                _sessionManager.ConfigurePendingPane(newPaneId, sourceDir, App.SettingsManager.Current.GetEnabledAgentClis());
+                _sessionManager.ConfigurePendingPane(
+                    newPaneId,
+                    sourceDir,
+                    App.SettingsManager.Current.GetEnabledAgentClis(),
+                    showChooserWhenMultipleEnabled: true);
         }
     }
 
@@ -343,6 +356,16 @@ public sealed partial class MainWindow : Window
         var workspace = App.WorkspaceManager.ActiveWorkspace;
         var tab = workspace?.ActiveTab;
         if (tab == null || workspace == null) return;
+
+        var startupPaneId = tab.RootSplit.GetAllPaneIds().FirstOrDefault();
+        if (startupPaneId != default && !_sessionManager.HasSession(startupPaneId))
+        {
+            _sessionManager.ConfigurePendingPane(
+                startupPaneId,
+                workspace.WorkingDirectory,
+                App.SettingsManager.Current.GetEnabledAgentClis(),
+                showChooserWhenMultipleEnabled: true);
+        }
 
         await PaneContainer.SetSplitTree(
             tab.RootSplit,

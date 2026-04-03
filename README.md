@@ -46,7 +46,7 @@ Download the latest release zip from GitHub Releases, extract it, and run `Gmux.
 
 ### Option 3: Installer
 
-MSI packaging is the intended release path, but the repo does not yet include MSI authoring. Use GitHub Releases portable assets or build from source until installer packaging is added.
+Download `gray-installer-win-x64.msi` from GitHub Releases and run it. The installer places the app under `Program Files\\gray` and the CLI under `Program Files\\gray\\cli`.
 
 ### Option 4: winget
 
@@ -75,16 +75,22 @@ Before publishing to GitHub:
 1. Update `RepositoryUrl` in [Directory.Build.props](Directory.Build.props).
 2. Set the correct version in [Directory.Build.props](Directory.Build.props).
 3. Tag releases with semantic versions like `v0.1.0`.
-4. Add installer packaging if you want MSI distribution.
-5. Add a winget manifest if you want command-line installation.
+4. Add a winget manifest if you want command-line installation.
 
 ## Release automation
 
 This repo includes a GitHub Actions workflow that:
 - builds the solution
 - publishes app and CLI artifacts
+- builds an MSI installer from the published app and CLI
 - uploads them as workflow artifacts
-- creates a GitHub Release and attaches zip assets on version tags
+- creates a GitHub Release and attaches zip and MSI assets on version tags
+
+Build the MSI locally:
+
+```powershell
+./scripts/build-msi.ps1
+```
 
 Tag a release:
 

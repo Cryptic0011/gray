@@ -135,9 +135,13 @@ public class SessionManager : IDisposable
 
     /// <summary>
     /// Set pane startup behavior: inherit working directory, then either auto-launch
-    /// the single configured agent or show a chooser when multiple are enabled.
+    /// the configured agent or show a chooser when requested.
     /// </summary>
-    public void ConfigurePendingPane(Guid paneId, string workingDirectory, IReadOnlyList<AgentCliKind> enabledAgents)
+    public void ConfigurePendingPane(
+        Guid paneId,
+        string workingDirectory,
+        IReadOnlyList<AgentCliKind> enabledAgents,
+        bool showChooserWhenMultipleEnabled = false)
     {
         _pendingWorkingDirs[paneId] = workingDirectory;
         _pendingAutoLaunchAgents.Remove(paneId);
@@ -146,6 +150,12 @@ public class SessionManager : IDisposable
         var settings = _settingsManager.Current;
         if (enabledAgents.Count == 0 || settings.AgentLaunchMode == AgentLaunchMode.Disabled)
         {
+            return;
+        }
+
+        if (showChooserWhenMultipleEnabled && enabledAgents.Count > 1)
+        {
+            _pendingAgentChoices[paneId] = enabledAgents.ToArray();
             return;
         }
 

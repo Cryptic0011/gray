@@ -8,7 +8,7 @@ This repo is a Windows terminal multiplexer app (`gray`) with:
 - waiting-state detection and notifications for tracked agent panes
 - persisted workspace state and app settings
 - basic GitHub Releases update-check support
-- release workflow for zip artifacts
+- release workflow for zip and MSI artifacts
 
 Build status at handoff:
 - `dotnet build gmux.sln` succeeds
@@ -92,7 +92,7 @@ Added:
 - GitHub Releases update checker
 - startup update check notification
 - release-oriented README
-- GitHub Actions workflow for build + publish zip artifacts
+- GitHub Actions workflow for build + publish release artifacts
 
 Key files:
 - `Directory.Build.props`
@@ -118,12 +118,12 @@ Update checker depends on this staying aligned with the real GitHub repo URL.
 The GitHub Actions workflow currently:
 - builds solution
 - publishes app and CLI
+- builds MSI installer
 - zips artifacts
 - uploads to workflow artifacts
-- creates GitHub Release assets on `v*` tags
+- creates GitHub Release zip and MSI assets on `v*` tags
 
 It does **not** yet do:
-- MSI creation
 - winget manifest publishing
 - code signing
 - checksums
@@ -137,16 +137,15 @@ It does **not** yet do:
    - `gemini`
    Aliases/wrapper scripts are not detected automatically.
 3. Waiting prompt detection is still prompt-shape based; it is now scoped to tracked agent panes, but not fully tool-specific.
-4. README mentions MSI/winget as planned, not implemented.
+4. MSI currently installs the CLI into `Program Files\gray\cli` to avoid payload collisions with app dependencies.
 
 ## Recommended next steps
 
 ### Highest value next
 
-1. Add MSI packaging
-2. Add winget packaging
-3. Add code signing plan
-4. Add checksums to releases
+1. Add winget packaging
+2. Add code signing plan
+3. Add checksums to releases
 
 ### Engineering hardening
 
@@ -165,11 +164,10 @@ It does **not** yet do:
 
 ## Suggested implementation order
 
-1. MSI packaging
-2. winget manifest
-3. release checksums + release notes
-4. tests
-5. code signing
+1. winget manifest
+2. release checksums + release notes
+3. tests
+4. code signing
 
 ## Commands used recently
 
@@ -196,6 +194,9 @@ dotnet run --project src/Gmux.Cli/Gmux.Cli.csproj -- status
 - `HANDOFF.md`
 - `README.md`
 - `.github/workflows/release.yml`
+- `scripts/build-msi.ps1`
+- `src/Gmux.Setup/Gmux.Setup.wixproj`
+- `src/Gmux.Setup/Package.wxs`
 - `src/Gmux.Core/Models/AgentCliKind.cs`
 - `src/Gmux.Core/Models/AgentLaunchMode.cs`
 - `src/Gmux.Core/Models/NotificationScope.cs`

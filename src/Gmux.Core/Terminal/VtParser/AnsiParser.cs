@@ -13,6 +13,7 @@ public class AnsiParser
     private readonly StringBuilder _params = new();
     private readonly StringBuilder _intermediates = new();
     private bool _privateMode; // '?' prefix in CSI
+    private char? _privatePrefix;
 
     // Saved cursor state for ESC 7 / ESC 8
     private int _savedCursorRow;
@@ -31,6 +32,8 @@ public class AnsiParser
         CsiIntermediate,
         OscString,
         OscStringEscape,
+        IgnoredString,
+        IgnoredStringEscape,
     }
 
     public AnsiParser(TerminalBuffer buffer)
@@ -73,10 +76,17 @@ public class AnsiParser
                         _params.Clear();
                         _intermediates.Clear();
                         _privateMode = false;
+                        _privatePrefix = null;
                         break;
                     case ']':
                         _state = ParserState.OscString;
                         _params.Clear();
+                        break;
+                    case 'P': // DCS
+                    case '^': // PM
+                    case '_': // APC
+                    case 'X': // SOS
+                        _state = ParserState.IgnoredString;
                         break;
                     case '(':
                     case ')':
@@ -134,12 +144,13 @@ public class AnsiParser
 
             case ParserState.CsiEntry:
                 if (c == '\x1b') { _state = ParserState.Escape; break; }
-                if (c == '?')
+                if (c is '?' or '>' or '<' or '=')
                 {
-                    _privateMode = true;
+                    _privatePrefix = c;
+                    _privateMode = c == '?';
                     _state = ParserState.CsiParam;
                 }
-                else if (c is >= '0' and <= '9' or ';')
+                else if (c is >= '0' and <= '9' or ';' or ':')
                 {
                     _params.Append(c);
                     _state = ParserState.CsiParam;
@@ -158,7 +169,7 @@ public class AnsiParser
 
             case ParserState.CsiParam:
                 if (c == '\x1b') { _state = ParserState.Escape; break; }
-                if (c is >= '0' and <= '9' or ';')
+                if (c is >= '0' and <= '9' or ';' or ':')
                 {
                     _params.Append(c);
                 }
@@ -212,6 +223,21 @@ public class AnsiParser
                     _state = ParserState.OscString;
                 }
                 break;
+
+            case ParserState.IgnoredString:
+                if (c == '\x1b')
+                {
+                    _state = ParserState.IgnoredStringEscape;
+                }
+                else if (c == '\x07')
+                {
+                    _state = ParserState.Ground;
+                }
+                break;
+
+            case ParserState.IgnoredStringEscape:
+                _state = c == '\\' ? ParserState.Ground : ParserState.IgnoredString;
+                break;
         }
     }
 
@@ -220,7 +246,7 @@ public class AnsiParser
         if (_params.Length == 0)
             return [defaultValue];
 
-        var parts = _params.ToString().Split(';');
+        var parts = _params.ToString().Split([';', ':']);
         var result = new int[parts.Length];
         for (int i = 0; i < parts.Length; i++)
         {
@@ -236,6 +262,12 @@ public class AnsiParser
         if (_privateMode)
         {
             ExecutePrivateCsi(final, p);
+            return;
+        }
+
+        if (_privatePrefix.HasValue)
+        {
+            // Ignore unsupported private CSI sequences such as CSI > ... m.
             return;
         }
 

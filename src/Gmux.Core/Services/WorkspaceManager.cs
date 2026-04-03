@@ -279,6 +279,17 @@ public class WorkspaceManager
             var workspaces = JsonSerializer.Deserialize<List<Workspace>>(json);
             if (workspaces != null)
             {
+                foreach (var workspace in workspaces)
+                {
+                    foreach (var tab in workspace.Tabs)
+                    {
+                        // Startup should always reopen each tab as a single fresh pane
+                        // instead of restoring the previous split layout.
+                        tab.RootSplit = SplitNode.CreateLeaf();
+                        tab.FocusedPaneId = null;
+                    }
+                }
+
                 _workspaces.Clear();
                 _workspaces.AddRange(workspaces);
                 if (_workspaces.Count > 0 && !_workspaces.Any(w => w.IsActive))

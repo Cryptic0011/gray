@@ -25,16 +25,13 @@ jobs:
       - name: Build
         run: dotnet build gmux.sln --configuration Release --no-restore
 
-      - name: Publish App
-        run: dotnet publish src/Gmux.App/Gmux.App.csproj -c Release -r win-x64 --self-contained false -o artifacts/app
-
-      - name: Publish CLI
-        run: dotnet publish src/Gmux.Cli/Gmux.Cli.csproj -c Release -r win-x64 --self-contained false -o artifacts/cli
+      - name: Build MSI
+        shell: pwsh
+        run: ./scripts/build-msi.ps1 -Configuration Release -Runtime win-x64
 
       - name: Create Zip Assets
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
           Compress-Archive -Path artifacts/app/* -DestinationPath dist/gray-app-win-x64.zip -Force
           Compress-Archive -Path artifacts/cli/* -DestinationPath dist/gray-cli-win-x64.zip -Force
 
@@ -51,3 +48,4 @@ jobs:
           files: |
             dist/gray-app-win-x64.zip
             dist/gray-cli-win-x64.zip
+            dist/gray-installer-win-x64.msi

@@ -1,0 +1,9 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+  <PropertyGroup>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <OutputName>gray-installer-win-x64</OutputName>
+    <AppPublishDir Condition="'$(AppPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\app\</AppPublishDir>
+    <CliPublishDir Condition="'$(CliPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\cli\</CliPublishDir>
+    <DefineConstants>$(DefineConstants);AppPublishDir=$(AppPublishDir);CliPublishDir=$(CliPublishDir);ProductVersion=$(Version);ProductManufacturer=$(Authors)</DefineConstants>
+  </PropertyGroup>
+</Project>
