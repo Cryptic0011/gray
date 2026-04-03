@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Authors>gray contributors</Authors>
+    <Company>gray contributors</Company>
+    <Product>gray</Product>
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <RepositoryUrl>https://github.com/Cryptic0011/gray</RepositoryUrl>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Gmux.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Gmux.App.Controls"
+    Title="gray">
+
+    <Grid Background="#272822">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200" MinWidth="150" MaxWidth="400" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Sidebar -->
+        <controls:WorkspaceSidebar
+            x:Name="Sidebar"
+            Grid.Column="0" />
+
+        <!-- Splitter -->
+        <Border
+            Grid.Column="1"
+            Width="2"
+            Background="#49483e" />
+
+        <!-- Main Content Area -->
+        <Grid Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Tab Bar -->
+            <Border
+                Grid.Row="0"
+                Background="#1e1e19"
+                Padding="8,4,8,4">
+                <Grid Background="Transparent">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Drag region behind the tabs — this is the title bar drag target -->
+                    <Border x:Name="TitleBarDragRegion" Grid.ColumnSpan="3" Background="Transparent" />
+
+                    <StackPanel
+                        x:Name="TabBar"
+                        Grid.Column="0"
+                        Orientation="Horizontal"
+                        Spacing="4" />
+                    <Button
+                        Grid.Column="1"
+                        Content="+"
+                        Click="NewTab_Click"
+                        Padding="8,4"
+                        FontWeight="Bold"
+                        FontSize="14"
+                        Background="Transparent"
+                        Foreground="#75715e"
+                        ToolTipService.ToolTip="New Tab (Ctrl+Shift+T)" />
+
+                    <!-- Mac-style traffic light buttons (right side) -->
+                    <StackPanel
+                        x:Name="TrafficLights"
+                        Grid.Column="2"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Center"
+                        Margin="12,0,4,0">
+                        <Button
+                            x:Name="MinimizeButton"
+                            Click="MinimizeButton_Click"
+                            Style="{StaticResource TrafficLightButtonStyle}"
+                            Content="&#x2013;"
+                            ToolTipService.ToolTip="Minimize">
+                            <Button.Background>
+                                <SolidColorBrush Color="#FEBC2E" />
+                            </Button.Background>
+                        </Button>
+                        <Button
+                            x:Name="MaximizeButton"
+                            Click="MaximizeButton_Click"
+                            Style="{StaticResource TrafficLightButtonStyle}"
+                            Content="&#x2b;"
+                            ToolTipService.ToolTip="Maximize">
+                            <Button.Background>
+                                <SolidColorBrush Color="#28C840" />
+                            </Button.Background>
+                        </Button>
+                        <Button
+                            x:Name="CloseButton"
+                            Click="CloseButton_Click"
+                            Style="{StaticResource TrafficLightButtonStyle}"
+                            Content="&#xd7;"
+                            ToolTipService.ToolTip="Close">
+                            <Button.Background>
+                                <SolidColorBrush Color="#FF5F57" />
+                            </Button.Background>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Terminal Pane Area -->
+            <Grid Grid.Row="1">
+                <controls:SplitPaneContainer
+                    x:Name="PaneContainer" />
+
+                <!-- Notification toast overlay -->
+                <InfoBar
+                    x:Name="NotificationBar"
+                    IsOpen="False"
+                    Severity="Informational"
+                    IsClosable="True"
+                    VerticalAlignment="Top"
+                    HorizontalAlignment="Right"
+                    Margin="0,8,16,0"
+                    Background="#3e3d32"
+                    CornerRadius="6" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

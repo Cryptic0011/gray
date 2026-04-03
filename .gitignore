@@ -1,0 +1,40 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vs/
+*.rsuser
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+
+## WinUI / Windows App SDK
+Generated Files/
+AppPackages/
+BundleArtifacts/
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## Build results
+[Bb]uild[Ll]og.*
+*.dll
+*.exe
+*.pdb
+*.cache
+
+## IDE
+*.idea/
+.vscode/
+*.code-workspace
