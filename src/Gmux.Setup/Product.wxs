@@ -8,30 +8,23 @@
            Version="$(ProductVersion)"
            Manufacturer="$(Manufacturer)"
            UpgradeCode="$(UpgradeCode)"
-           Scope="perMachineOrPerUser"
+           Scope="perMachine"
            InstallerVersion="500"
            Compressed="yes">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of $(ProductName) is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <!-- Per-machine: Program Files\gray, Per-user: LocalAppData\Programs\gray -->
+    <!-- Install to Program Files\gray -->
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER_MACHINE" Name="gray" />
-    </StandardDirectory>
-
-    <StandardDirectory Id="LocalAppDataFolder">
-      <Directory Id="ProgramsSubfolder" Name="Programs">
-        <Directory Id="INSTALLFOLDER_USER" Name="gray" />
-      </Directory>
+      <Directory Id="INSTALLFOLDER" Name="gray" />
     </StandardDirectory>
 
     <StandardDirectory Id="DesktopFolder" />
 
     <!-- App files harvested from publish output -->
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-      <Files Include="$(AppPublishDir)\**"
-             Exclude="$(AppPublishDir)\**\*.pdb" />
+      <Files Include="$(AppPublishDir)\**" />
     </ComponentGroup>
 
     <!-- CLI files (only Gmux.Cli-specific files; shared DLLs already in App) -->
@@ -84,13 +77,9 @@
     <Icon Id="AppIcon" SourceFile="$(AppPublishDir)\ico.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
 
-    <!-- Minimal UI: scope selection + progress -->
+    <!-- Minimal UI: install dir + progress -->
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <ui:WixUI Id="WixUI_InstallDir" />
-
-    <!-- Resolve INSTALLFOLDER based on scope -->
-    <SetDirectory Id="INSTALLFOLDER" Value="[INSTALLFOLDER_MACHINE]" Condition="ALLUSERS = 1" Sequence="first" />
-    <SetDirectory Id="INSTALLFOLDER" Value="[INSTALLFOLDER_USER]" Condition="NOT (ALLUSERS = 1)" Sequence="first" />
 
   </Package>
 
