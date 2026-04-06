@@ -220,34 +220,42 @@ public class AgentMonitorService : IDisposable
     }
 
     /// <summary>
-    /// Detect Claude Code's input prompt in a terminal buffer.
-    /// Scans the bottom portion of the visible buffer for the "> " prompt pattern.
+    /// Detect whether an agent CLI is waiting for user input by scanning
+    /// the terminal buffer for known input-mode indicators.
     /// </summary>
-    public static bool DetectClaudePrompt(TerminalBuffer buffer)
+    public static bool DetectAgentPrompt(TerminalBuffer buffer)
     {
-        // Search around the cursor for Claude's "> " prompt at column 0.
-        // Claude's status bar can be up to ~7 rows below the prompt, so we
-        // use a generous window of ±10 rows. This avoids matching old prompts
-        // that are 12+ rows away when Claude is actively working.
-        int cursorRow = buffer.CursorRow;
-        int startRow = Math.Min(cursorRow + 10, buffer.Rows - 1);
-        int endRow = Math.Max(0, cursorRow - 10);
+        // Agent CLIs use full-screen TUIs (alternate buffer). Their "waiting
+        // for input" state has distinctive visual patterns:
+        //
+        // Claude Code / Codex: show "⏎ send" hint bar when in input mode.
+        //   The ⏎ (U+23CE RETURN SYMBOL) only appears during input mode.
+        //
+        // Gemini CLI: shows ">>>" or ">" input prompt.
+        //
+        // Scan the entire visible buffer since cursor may be on the status
+        // bar, not the prompt line.
 
-        for (int row = startRow; row >= endRow; row--)
+        for (int row = 0; row < buffer.Rows; row++)
         {
-            if (buffer.Columns < 2) continue;
+            int cols = buffer.Columns;
+            if (cols < 2) continue;
 
+            // --- Claude Code / Codex: look for ⏎ (U+23CE) anywhere in row ---
+            for (int col = 0; col < cols; col++)
+            {
+                if (buffer.GetCell(row, col).Character == '\u23CE')
+                    return true;
+            }
+
+            // --- Prompt chars at column 0, followed by space ---
+            // ">" (U+003E), "❯" (U+276F), "›" (U+203A — used by Codex)
             char c0 = buffer.GetCell(row, 0).Character;
             char c1 = buffer.GetCell(row, 1).Character;
-
-            // Claude Code's prompt: "❯" (U+276F) or ">" at column 0,
-            // followed by space, NBSP, or null
-            bool isPromptChar = c0 == '\u276F' || c0 == '>';
+            bool isPromptChar = c0 == '>' || c0 == '\u276F' || c0 == '\u203A';
             bool isFollowedBySpace = c1 == ' ' || c1 == '\u00A0' || c1 == '\0';
             if (isPromptChar && isFollowedBySpace)
-            {
                 return true;
-            }
         }
 
         return false;

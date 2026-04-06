@@ -59,6 +59,7 @@ public sealed partial class MainWindow : Window
         PaneContainer.ClosePaneRequested += OnContextClosePane;
         PaneContainer.NewTabRequested += OnContextNewTab;
         PaneContainer.ChangeDirectoryRequested += OnContextChangeDirectory;
+        PaneContainer.InitialDirectorySelectionRequested += OnInitialDirectorySelectionRequested;
         _focusManager.FocusChanged += OnFocusChanged;
 
         // Agent monitor — refresh UI when waiting state changes
@@ -157,21 +158,45 @@ public sealed partial class MainWindow : Window
 
     private async void OnContextChangeDirectory(Guid paneId)
     {
-        var picker = new Windows.Storage.Pickers.FolderPicker();
-        picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder;
-        picker.FileTypeFilter.Add("*");
-
-        // Initialize picker with the window handle (required for WinUI 3)
-        var hwnd = WindowNative.GetWindowHandle(this);
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-        var folder = await picker.PickSingleFolderAsync();
+        var folder = await PickFolderAsync();
         if (folder != null)
         {
             var session = _sessionManager.GetOrCreateSession(paneId);
             // Send cd command to the terminal — works for cmd.exe, powershell, bash
             session.SendInput($"cd /d \"{folder.Path}\"\r");
         }
+    }
+
+    private async void OnInitialDirectorySelectionRequested(Guid paneId)
+    {
+        var folder = await PickFolderAsync();
+        if (folder == null)
+            return;
+
+        var workspace = App.WorkspaceManager.ActiveWorkspace;
+        if (workspace == null)
+            return;
+
+        App.WorkspaceManager.UpdateWorkspaceDirectory(workspace.Id, folder.Path);
+        _sessionManager.CompleteDirectorySelection(paneId, folder.Path);
+        _sessionManager.ConfigurePendingPane(
+            paneId,
+            folder.Path,
+            App.SettingsManager.Current.GetEnabledAgentClis());
+
+        await LoadActiveTabAsync();
+    }
+
+    private async Task<Windows.Storage.StorageFolder?> PickFolderAsync()
+    {
+        var picker = new Windows.Storage.Pickers.FolderPicker();
+        picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder;
+        picker.FileTypeFilter.Add("*");
+
+        var hwnd = WindowNative.GetWindowHandle(this);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+        return await picker.PickSingleFolderAsync();
     }
 
     // --- Event Handlers ---
@@ -588,9 +613,12 @@ public sealed partial class MainWindow : Window
 
             case Windows.System.VirtualKey.N: // New workspace
                 var count = App.WorkspaceManager.Workspaces.Count + 1;
-                App.WorkspaceManager.CreateWorkspace(
+                var newWs = App.WorkspaceManager.CreateWorkspace(
                     $"Workspace {count}",
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+                var newWsPaneId = newWs.ActiveTab?.RootSplit.GetAllPaneIds().FirstOrDefault();
+                if (newWsPaneId.HasValue && newWsPaneId.Value != default)
+                    _sessionManager.ConfigurePendingPane(newWsPaneId.Value, newWs.WorkingDirectory, App.SettingsManager.Current.GetEnabledAgentClis());
                 e.Handled = true;
                 break;
 

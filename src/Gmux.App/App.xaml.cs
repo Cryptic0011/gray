@@ -32,14 +32,15 @@ public partial class App : Application
         PipeServer.OnMessage += HandleIpcMessage;
         await PipeServer.StartAsync();
 
-        // Load saved state
-        await WorkspaceManager.LoadStateAsync();
+        // Always start fresh — one workspace, one tab, one pane
+        var workspace = WorkspaceManager.CreateWorkspace("Default",
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
-        // If no workspaces, create a default one
-        if (WorkspaceManager.Workspaces.Count == 0)
+        // Require a working directory before showing the initial agent chooser
+        var firstPaneId = workspace.ActiveTab?.RootSplit.GetAllPaneIds().FirstOrDefault();
+        if (firstPaneId.HasValue && firstPaneId.Value != default && SessionManager != null)
         {
-            WorkspaceManager.CreateWorkspace("Default",
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+            SessionManager.RequireDirectorySelection(firstPaneId.Value);
         }
 
         _ = Task.Run(async () =>
