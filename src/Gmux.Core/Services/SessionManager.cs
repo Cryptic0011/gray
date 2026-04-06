@@ -14,6 +14,7 @@ public class SessionManager : IDisposable
     private readonly Dictionary<Guid, string> _pendingWorkingDirs = new();
     private readonly Dictionary<Guid, AgentCliKind> _pendingAutoLaunchAgents = new();
     private readonly Dictionary<Guid, IReadOnlyList<AgentCliKind>> _pendingAgentChoices = new();
+    private readonly HashSet<Guid> _pendingDirectorySelections = new();
     private readonly HashSet<Guid> _trackedAgentPanes = new();
     private readonly string _defaultWorkingDirectory;
     private readonly SettingsManager _settingsManager;
@@ -84,7 +85,7 @@ public class SessionManager : IDisposable
                         windowStart = now;
                     }
 
-                    bool promptVisible = AgentMonitorService.DetectClaudePrompt(session.Buffer);
+                    bool promptVisible = AgentMonitorService.DetectAgentPrompt(session.Buffer);
                     // Cursor blinks: ~1-2 events/sec. Claude working: 5+ events/sec.
                     bool lowOutputRate = eventsPerSecond < 3;
 
@@ -117,6 +118,9 @@ public class SessionManager : IDisposable
 
     public async Task EnsureStartedAsync(Guid paneId, string? workingDirectory = null)
     {
+        if (_pendingDirectorySelections.Contains(paneId))
+            return;
+
         var session = GetOrCreateSession(paneId);
         if (!session.IsRunning)
         {
@@ -134,12 +138,32 @@ public class SessionManager : IDisposable
     }
 
     /// <summary>
+    /// Mark a pane so it prompts for a working directory before starting a shell.
+    /// </summary>
+    public void RequireDirectorySelection(Guid paneId)
+    {
+        _pendingDirectorySelections.Add(paneId);
+        _pendingWorkingDirs.Remove(paneId);
+        _pendingAutoLaunchAgents.Remove(paneId);
+        _pendingAgentChoices.Remove(paneId);
+    }
+
+    public bool NeedsDirectorySelection(Guid paneId) => _pendingDirectorySelections.Contains(paneId);
+
+    public void CompleteDirectorySelection(Guid paneId, string workingDirectory)
+    {
+        _pendingDirectorySelections.Remove(paneId);
+        _pendingWorkingDirs[paneId] = workingDirectory;
+    }
+
+    /// <summary>
     /// Set pane startup behavior: inherit working directory, then either auto-launch
     /// the single configured agent or show a chooser when multiple are enabled.
     /// </summary>
     public void ConfigurePendingPane(Guid paneId, string workingDirectory, IReadOnlyList<AgentCliKind> enabledAgents)
     {
         _pendingWorkingDirs[paneId] = workingDirectory;
+        _pendingDirectorySelections.Remove(paneId);
         _pendingAutoLaunchAgents.Remove(paneId);
         _pendingAgentChoices.Remove(paneId);
 
@@ -194,6 +218,7 @@ public class SessionManager : IDisposable
             timer.Dispose();
         }
         _trackedAgentPanes.Remove(paneId);
+        _pendingDirectorySelections.Remove(paneId);
         _pendingAutoLaunchAgents.Remove(paneId);
         _pendingAgentChoices.Remove(paneId);
         if (_sessions.Remove(paneId, out var session))
@@ -275,6 +300,7 @@ public class SessionManager : IDisposable
             timer.Dispose();
         }
         _pollTimers.Clear();
+        _pendingDirectorySelections.Clear();
         _pendingAutoLaunchAgents.Clear();
         _pendingAgentChoices.Clear();
         _trackedAgentPanes.Clear();

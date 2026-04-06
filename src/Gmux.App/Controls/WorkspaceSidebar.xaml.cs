@@ -109,9 +109,14 @@ public sealed partial class WorkspaceSidebar : UserControl
         };
 
         if (await dialog.ShowAsync() == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(textBox.Text))
-            App.WorkspaceManager.CreateWorkspace(
+        {
+            var ws = App.WorkspaceManager.CreateWorkspace(
                 textBox.Text.Trim(),
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+            var paneId = ws.ActiveTab?.RootSplit.GetAllPaneIds().FirstOrDefault();
+            if (paneId.HasValue && paneId.Value != default && App.SessionManager != null)
+                App.SessionManager.ConfigurePendingPane(paneId.Value, ws.WorkingDirectory, App.SettingsManager.Current.GetEnabledAgentClis());
+        }
     }
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)

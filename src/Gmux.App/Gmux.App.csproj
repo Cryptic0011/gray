@@ -21,6 +21,9 @@
 
   <ItemGroup>
     <Content Include="..\..\ico.ico" Link="ico.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\claude.png" Link="Assets\claude.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\codex.png" Link="Assets\codex.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\gemini.png" Link="Assets\gemini.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

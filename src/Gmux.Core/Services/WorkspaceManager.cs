@@ -68,6 +68,18 @@ public class WorkspaceManager
         WorkspacesChanged?.Invoke();
     }
 
+    public void UpdateWorkspaceDirectory(Guid id, string workingDirectory)
+    {
+        var workspace = _workspaces.FirstOrDefault(w => w.Id == id);
+        if (workspace == null || string.IsNullOrWhiteSpace(workingDirectory)) return;
+
+        workspace.WorkingDirectory = workingDirectory;
+        _ = RefreshGitBranchAsync(workspace).ContinueWith(
+            t => System.Diagnostics.Debug.WriteLine($"Git branch refresh failed: {t.Exception?.InnerException?.Message}"),
+            TaskContinuationOptions.OnlyOnFaulted);
+        WorkspacesChanged?.Invoke();
+    }
+
     public void RemoveWorkspace(Guid id)
     {
         _workspaces.RemoveAll(w => w.Id == id);

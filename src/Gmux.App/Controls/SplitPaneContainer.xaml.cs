@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Gmux.Core.Models;
 using Gmux.Core.Services;
 
@@ -21,6 +22,7 @@ public sealed partial class SplitPaneContainer : UserControl
     public event Action<Guid>? ClosePaneRequested;
     public event Action? NewTabRequested;
     public event Action<Guid>? ChangeDirectoryRequested;
+    public event Action<Guid>? InitialDirectorySelectionRequested;
 
     public SplitPaneContainer()
     {
@@ -144,8 +146,9 @@ public sealed partial class SplitPaneContainer : UserControl
         if (node.Type == SplitNodeType.Leaf && node.PaneId.HasValue)
         {
             var paneId = node.PaneId.Value;
+            var needsDirectorySelection = sessionManager.NeedsDirectorySelection(paneId);
 
-            if (!_terminalControls.TryGetValue(paneId, out var terminal))
+            if (!_terminalControls.TryGetValue(paneId, out var terminal) && !needsDirectorySelection)
             {
                 terminal = new TerminalControl { PaneId = paneId };
                 await sessionManager.EnsureStartedAsync(paneId, workingDirectory);
@@ -163,13 +166,19 @@ public sealed partial class SplitPaneContainer : UserControl
             _paneOverlays[paneId] = tintOverlay;
 
             var innerGrid = new Grid();
-            innerGrid.Children.Add(terminal);
+            if (!needsDirectorySelection && terminal != null)
+                innerGrid.Children.Add(terminal);
             innerGrid.Children.Add(tintOverlay); // overlay on top
 
-            var agentChoices = sessionManager.GetPendingAgentChoices(paneId);
-            if (agentChoices.Count > 1)
+            if (needsDirectorySelection)
             {
-                innerGrid.Children.Add(BuildAgentLauncherOverlay(paneId, agentChoices, sessionManager));
+                innerGrid.Children.Add(BuildDirectoryLauncherOverlay(paneId));
+            }
+            else
+            {
+                var agentChoices = sessionManager.GetPendingAgentChoices(paneId);
+                if (agentChoices.Count > 1)
+                    innerGrid.Children.Add(BuildAgentLauncherOverlay(paneId, agentChoices, sessionManager));
             }
 
             var wrapper = new Border
@@ -312,10 +321,20 @@ public sealed partial class SplitPaneContainer : UserControl
 
         foreach (var agent in agentChoices)
         {
+            var buttonContent = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
+            buttonContent.Children.Add(CreateAgentLogo(agent));
+            buttonContent.Children.Add(new TextBlock
+            {
+                Text = GetAgentLabel(agent),
+                FontSize = 11,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x27, 0x28, 0x22)),
+            });
+
             var button = new Button
             {
-                Content = GetAgentLabel(agent),
-                Padding = new Thickness(14, 8, 14, 8),
+                Content = buttonContent,
+                Padding = new Thickness(16, 10, 16, 10),
                 Background = new SolidColorBrush(GetAgentButtonColor(agent)),
                 Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x27, 0x28, 0x22)),
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
@@ -336,6 +355,55 @@ public sealed partial class SplitPaneContainer : UserControl
         return host;
     }
 
+    private FrameworkElement BuildDirectoryLauncherOverlay(Guid paneId)
+    {
+        var host = new Border
+        {
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(210, 0x1e, 0x1e, 0x19)),
+            BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x49, 0x48, 0x3e)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(20, 18, 20, 18),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            MinWidth = 320,
+        };
+
+        var panel = new StackPanel { Spacing = 12 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Choose working directory",
+            FontSize = 18,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xf8, 0xf8, 0xf2)),
+            HorizontalAlignment = HorizontalAlignment.Center
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Pick the folder for this first pane before launching an agent.",
+            TextWrapping = TextWrapping.WrapWholeWords,
+            Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x75, 0x71, 0x5e)),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            MaxWidth = 260
+        });
+
+        var chooseButton = new Button
+        {
+            Content = "Choose Folder",
+            Padding = new Thickness(16, 10, 16, 10),
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x66, 0xd9, 0xef)),
+            Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x27, 0x28, 0x22)),
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            CornerRadius = new CornerRadius(8),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        chooseButton.Click += (s, e) => InitialDirectorySelectionRequested?.Invoke(paneId);
+
+        panel.Children.Add(chooseButton);
+        host.Child = panel;
+        return host;
+    }
+
     private static string GetAgentLabel(AgentCliKind agent) => agent switch
     {
         AgentCliKind.Claude => "Claude",
@@ -344,11 +412,33 @@ public sealed partial class SplitPaneContainer : UserControl
         _ => agent.ToString()
     };
 
+    private static FrameworkElement CreateAgentLogo(AgentCliKind agent)
+    {
+        var image = new Image
+        {
+            Width = 28,
+            Height = 28,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Source = new BitmapImage(new Uri(GetAgentLogoUri(agent)))
+        };
+
+        return image;
+    }
+
+    private static string GetAgentLogoUri(AgentCliKind agent) => agent switch
+    {
+        AgentCliKind.Claude => "ms-appx:///Assets/claude.png",
+        AgentCliKind.Codex => "ms-appx:///Assets/codex.png",
+        AgentCliKind.Gemini => "ms-appx:///Assets/gemini.png",
+        _ => "ms-appx:///ico.ico"
+    };
+
     private static Windows.UI.Color GetAgentButtonColor(AgentCliKind agent) => agent switch
     {
         AgentCliKind.Claude => Windows.UI.Color.FromArgb(255, 0xfd, 0x97, 0x1f),
-        AgentCliKind.Codex => Windows.UI.Color.FromArgb(255, 0x66, 0xd9, 0xef),
-        AgentCliKind.Gemini => Windows.UI.Color.FromArgb(255, 0xa6, 0xe2, 0x2e),
+        AgentCliKind.Codex => Windows.UI.Color.FromArgb(255, 0xa6, 0xe2, 0x2e),
+        AgentCliKind.Gemini => Windows.UI.Color.FromArgb(255, 0xae, 0x81, 0xff),
         _ => Windows.UI.Color.FromArgb(255, 0xf8, 0xf8, 0xf2)
     };
 
