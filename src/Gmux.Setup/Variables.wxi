@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Include>
+  <?ifndef ProductVersion ?>
+    <?define ProductVersion = "0.1.0" ?>
+  <?endif ?>
+
+  <?define ProductName = "gray" ?>
+  <?define Manufacturer = "gray contributors" ?>
+  <?define UpgradeCode = "7A2E4F91-3B8C-4D5E-A6F0-1C9D2E8B7A43" ?>
+  <?define AppPublishDir = "..\..\artifacts\app" ?>
+  <?define CliPublishDir = "..\..\artifacts\cli" ?>
+</Include>
