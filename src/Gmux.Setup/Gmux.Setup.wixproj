@@ -1,0 +1,9 @@
+<Project Sdk="WixToolset.Sdk/4.0.7">
+
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <OutputName>gray-installer-win-x64</OutputName>
+  </PropertyGroup>
+
+</Project>
