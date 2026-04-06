@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <?include Variables.wxi ?>
+
+  <Package Name="$(ProductName)"
+           Version="$(ProductVersion)"
+           Manufacturer="$(Manufacturer)"
+           UpgradeCode="$(UpgradeCode)"
+           Scope="perMachineOrPerUser"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of $(ProductName) is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Per-machine: Program Files\gray, Per-user: LocalAppData\Programs\gray -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER_MACHINE" Name="gray" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsSubfolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER_USER" Name="gray" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- App files harvested from publish output -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(AppPublishDir)\**"
+             Exclude="$(AppPublishDir)\**\*.pdb" />
+    </ComponentGroup>
+
+    <!-- CLI files (only Gmux.Cli-specific files; shared DLLs already in App) -->
+    <ComponentGroup Id="CliFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(CliPublishDir)\Gmux.Cli.*" />
+      <Files Include="$(CliPublishDir)\System.CommandLine.dll" />
+    </ComponentGroup>
+
+    <!-- Desktop shortcut -->
+    <Component Id="DesktopShortcutComponent" Directory="DesktopFolder" Guid="B3F1A2D4-5E6C-7890-AB12-CD34EF56A789">
+      <Shortcut Id="DesktopShortcut"
+                Name="gray"
+                Description="Terminal multiplexer for AI agents"
+                Target="[INSTALLFOLDER]Gmux.App.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="AppIcon" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\gray\Install"
+                     Name="DesktopShortcut"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <!-- Add install dir to PATH -->
+    <Component Id="PathEnvComponent" Directory="INSTALLFOLDER" Guid="C4E2B3A1-6D7F-8901-BC23-DE45FA67B890">
+      <Environment Id="PathEntry"
+                   Name="PATH"
+                   Value="[INSTALLFOLDER]"
+                   Permanent="no"
+                   Part="last"
+                   Action="set"
+                   System="yes" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\gray\Install"
+                     Name="PathEnv"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <Feature Id="Complete" Title="gray" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="CliFiles" />
+      <ComponentRef Id="DesktopShortcutComponent" />
+      <ComponentRef Id="PathEnvComponent" />
+    </Feature>
+
+    <!-- App icon for shortcuts and Add/Remove Programs -->
+    <Icon Id="AppIcon" SourceFile="$(AppPublishDir)\ico.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+
+    <!-- Minimal UI: scope selection + progress -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <ui:WixUI Id="WixUI_InstallDir" />
+
+    <!-- Resolve INSTALLFOLDER based on scope -->
+    <SetDirectory Id="INSTALLFOLDER" Value="[INSTALLFOLDER_MACHINE]" Condition="ALLUSERS = 1" Sequence="first" />
+    <SetDirectory Id="INSTALLFOLDER" Value="[INSTALLFOLDER_USER]" Condition="NOT (ALLUSERS = 1)" Sequence="first" />
+
+  </Package>
+
+</Wix>
