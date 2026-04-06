@@ -17,6 +17,7 @@ public sealed partial class MainWindow : Window
     private DispatcherTimer? _stateSaveTimer;
     private DispatcherTimer? _notificationDismissTimer;
     private DispatcherTimer? _waitingNotificationDelayTimer;
+    private DispatcherTimer? _notificationClearGraceTimer;
     private string? _lastWaitingNotificationSignature;
     private string? _pendingWaitingNotificationSignature;
     private string? _pendingWaitingNotificationTitle;
@@ -24,6 +25,7 @@ public sealed partial class MainWindow : Window
     private bool _isLoadingActiveTab;
     private bool _pendingActiveTabLoad;
     private static readonly TimeSpan WaitingNotificationDelay = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan NotificationClearGrace = TimeSpan.FromSeconds(3);
 
     public MainWindow()
     {
@@ -458,11 +460,26 @@ public sealed partial class MainWindow : Window
             _pendingWaitingNotificationTitle = null;
             _pendingWaitingNotificationMessage = null;
             _waitingNotificationDelayTimer?.Stop();
-            _lastWaitingNotificationSignature = null;
-            _notificationDismissTimer?.Stop();
-            NotificationBar.IsOpen = false;
+
+            // Grace period: don't clear signature immediately.
+            // If waiting comes back within a few seconds (detection blip),
+            // the same signature won't re-trigger the notification.
+            if (_lastWaitingNotificationSignature != null)
+            {
+                _notificationDismissTimer?.Stop();
+                NotificationBar.IsOpen = false;
+                _notificationClearGraceTimer ??= new DispatcherTimer();
+                _notificationClearGraceTimer.Interval = NotificationClearGrace;
+                _notificationClearGraceTimer.Stop();
+                _notificationClearGraceTimer.Tick -= OnNotificationClearGraceTick;
+                _notificationClearGraceTimer.Tick += OnNotificationClearGraceTick;
+                _notificationClearGraceTimer.Start();
+            }
             return;
         }
+
+        // Waiting tabs found — cancel any pending clear grace
+        _notificationClearGraceTimer?.Stop();
 
         int totalWaiting = waitingTabs.Sum(x => x.WaitingCount);
         string signature = string.Join("|", waitingTabs
@@ -510,6 +527,14 @@ public sealed partial class MainWindow : Window
         NotificationBar.Severity = InfoBarSeverity.Warning;
         NotificationBar.IsOpen = true;
         AutoDismissNotification();
+    }
+
+    private void OnNotificationClearGraceTick(object? sender, object e)
+    {
+        _notificationClearGraceTimer?.Stop();
+        _lastWaitingNotificationSignature = null;
+        _notificationDismissTimer?.Stop();
+        NotificationBar.IsOpen = false;
     }
 
     private void AutoDismissNotification()

@@ -30,12 +30,17 @@ public class AgentMonitorService : IDisposable
     private readonly object _lock = new();
     private readonly Dictionary<Guid, PaneAgentState> _paneStates = new();
     private readonly Dictionary<Guid, DateTime> _workingStartTime = new();
+    private readonly Dictionary<Guid, int> _waitingExitCount = new(); // consecutive non-prompt hits while Waiting
     private readonly HashSet<Guid> _paneHasUserInput = new();
     private readonly System.Timers.Timer _debounceTimer;
 
     // Pane must be in Working state for this long before transition to Waiting.
     // Prevents false notification during Claude's startup sequence.
     private static readonly TimeSpan MinWorkingDuration = TimeSpan.FromSeconds(5);
+
+    // Number of consecutive non-prompt detections required to leave Waiting.
+    // Prevents brief detection blips from causing notification flicker.
+    private const int WaitingExitThreshold = 3;
 
     private static readonly string _logPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -93,6 +98,7 @@ public class AgentMonitorService : IDisposable
         {
             _paneStates[paneId] = PaneAgentState.Idle;
             _workingStartTime.Remove(paneId);
+            _waitingExitCount.Remove(paneId);
             _paneHasUserInput.Remove(paneId);
         }
     }
@@ -125,6 +131,20 @@ public class AgentMonitorService : IDisposable
                 && _workingStartTime.TryGetValue(paneId, out var startTime)
                 && (DateTime.UtcNow - startTime) >= MinWorkingDuration;
 
+            // Track consecutive non-prompt hits while Waiting to add hysteresis
+            if (current == PaneAgentState.Waiting && !promptVisible)
+            {
+                _waitingExitCount.TryGetValue(paneId, out var count);
+                _waitingExitCount[paneId] = count + 1;
+            }
+            else if (current == PaneAgentState.Waiting && promptVisible)
+            {
+                _waitingExitCount[paneId] = 0; // reset on prompt visible
+            }
+
+            _waitingExitCount.TryGetValue(paneId, out var exitCount);
+            bool waitingExitConfirmed = exitCount >= WaitingExitThreshold;
+
             var next = (current, promptVisible) switch
             {
                 // Idle: no signal yet. Stay idle until Claude is detected as idle.
@@ -143,15 +163,17 @@ public class AgentMonitorService : IDisposable
                 (PaneAgentState.Working, true) when workingLongEnough => PaneAgentState.Waiting,
                 (PaneAgentState.Working, true) => PaneAgentState.Working, // too soon
 
-                // Waiting: Claude finished. Still idle → keep notification.
-                // Output flowing again → user gave more input.
+                // Waiting: require multiple consecutive non-prompt signals before
+                // leaving. Prevents brief detection blips from causing flicker.
                 (PaneAgentState.Waiting, true) => PaneAgentState.Waiting,
-                (PaneAgentState.Waiting, false) => PaneAgentState.Working,
+                (PaneAgentState.Waiting, false) when waitingExitConfirmed => PaneAgentState.Working,
+                (PaneAgentState.Waiting, false) => PaneAgentState.Waiting, // not confirmed yet
 
-                // Dismissed: user clicked in. Stay suppressed while idle.
-                // Output flowing → Claude working, ready for next cycle.
+                // Dismissed: user clicked in. Stay suppressed until user sends
+                // new input AND output starts flowing (agent working again).
                 (PaneAgentState.Dismissed, true) => PaneAgentState.Dismissed,
-                (PaneAgentState.Dismissed, false) => PaneAgentState.Working,
+                (PaneAgentState.Dismissed, false) when hasUserInput => PaneAgentState.Working,
+                (PaneAgentState.Dismissed, false) => PaneAgentState.Dismissed,
 
                 _ => current,
             };
@@ -165,6 +187,8 @@ public class AgentMonitorService : IDisposable
 
             if (next == PaneAgentState.Working)
                 _workingStartTime[paneId] = DateTime.UtcNow;
+            if (next != PaneAgentState.Waiting)
+                _waitingExitCount.Remove(paneId);
 
             _paneStates[paneId] = next;
 
@@ -188,6 +212,7 @@ public class AgentMonitorService : IDisposable
             if (changed)
             {
                 _paneStates[paneId] = PaneAgentState.Dismissed;
+                _paneHasUserInput.Remove(paneId); // require new input before re-entering work/wait cycle
                 Log($"Pane {paneId.ToString()[..8]} : Waiting → Dismissed (user clicked)");
             }
             else
@@ -207,6 +232,7 @@ public class AgentMonitorService : IDisposable
             changed = _paneStates.TryGetValue(paneId, out var current) && current == PaneAgentState.Waiting;
             _paneStates.Remove(paneId);
             _workingStartTime.Remove(paneId);
+            _waitingExitCount.Remove(paneId);
             _paneHasUserInput.Remove(paneId);
         }
         lock (_detectionLog)
