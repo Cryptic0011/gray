@@ -77,9 +77,10 @@
 
                         <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                                     Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="{Binding GitBranch}"
+                            <TextBlock Text="{Binding GitBranchLabel}"
                                        FontSize="11" Foreground="#75715e"
-                                       FontFamily="Cascadia Mono, Consolas" />
+                                       FontFamily="Cascadia Mono, Consolas"
+                                       Visibility="{Binding GitBranchVisibility}" />
                             <TextBlock Text="{Binding ShortPath}"
                                        FontSize="11" Foreground="#49483e" />
                         </StackPanel>

@@ -4,5 +4,6 @@ public enum AgentCliKind
 {
     Claude,
     Codex,
-    Gemini
+    Gemini,
+    None
 }

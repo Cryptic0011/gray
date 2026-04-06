@@ -44,7 +44,14 @@ public class SessionManager : IDisposable
         session.InputSent += (_, text) =>
         {
             if (LooksLikeAgentLaunch(text))
+            {
                 _trackedAgentPanes.Add(paneId);
+                _agentMonitor?.RegisterAgentLaunch(paneId);
+            }
+            else if (_trackedAgentPanes.Contains(paneId))
+            {
+                _agentMonitor?.MarkUserInput(paneId);
+            }
         };
 
         // Monitor this session for Claude prompt detection.
@@ -204,10 +211,11 @@ public class SessionManager : IDisposable
     {
         _pendingAgentChoices.Remove(paneId);
         var session = GetOrCreateSession(paneId);
-        if (!session.IsRunning)
+        bool wasRunning = session.IsRunning;
+        if (!wasRunning)
             await EnsureStartedAsync(paneId);
 
-        await LaunchAgentInSessionAsync(paneId, session, agent);
+        await LaunchAgentInSessionAsync(paneId, session, agent, waitForShellOutput: !wasRunning);
     }
 
     public void DestroySession(Guid paneId)
@@ -329,16 +337,25 @@ public class SessionManager : IDisposable
         return false;
     }
 
-    private async Task LaunchAgentInSessionAsync(Guid paneId, TerminalSession session, AgentCliKind agent)
+    private async Task LaunchAgentInSessionAsync(Guid paneId, TerminalSession session, AgentCliKind agent, bool waitForShellOutput = true)
     {
-        _trackedAgentPanes.Add(paneId);
+        var command = _settingsManager.Current.GetLaunchCommand(agent);
+        if (command == null)
+            return; // None — just open a blank shell
 
-        var tcs = new TaskCompletionSource();
-        void onOutput(Terminal.TerminalSession _) { tcs.TrySetResult(); }
-        session.OutputChanged += onOutput;
-        await Task.WhenAny(tcs.Task, Task.Delay(2000));
-        session.OutputChanged -= onOutput;
-        await Task.Delay(50);
-        session.SendInput(_settingsManager.Current.GetLaunchCommand(agent) + "\r");
+        _trackedAgentPanes.Add(paneId);
+        _agentMonitor?.RegisterAgentLaunch(paneId);
+
+        if (waitForShellOutput)
+        {
+            var tcs = new TaskCompletionSource();
+            void onOutput(Terminal.TerminalSession _) { tcs.TrySetResult(); }
+            session.OutputChanged += onOutput;
+            await Task.WhenAny(tcs.Task, Task.Delay(2000));
+            session.OutputChanged -= onOutput;
+            await Task.Delay(50);
+        }
+
+        session.SendInput(command + "\r");
     }
 }

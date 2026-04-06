@@ -23,6 +23,7 @@ public sealed partial class SplitPaneContainer : UserControl
     public event Action? NewTabRequested;
     public event Action<Guid>? ChangeDirectoryRequested;
     public event Action<Guid>? InitialDirectorySelectionRequested;
+    public event Action? RefreshRequested;
 
     public SplitPaneContainer()
     {
@@ -147,10 +148,14 @@ public sealed partial class SplitPaneContainer : UserControl
         {
             var paneId = node.PaneId.Value;
             var needsDirectorySelection = sessionManager.NeedsDirectorySelection(paneId);
+            var agentChoices = sessionManager.GetPendingAgentChoices(paneId);
+            var hasPendingOverlay = needsDirectorySelection || agentChoices.Count > 0;
 
-            if (!_terminalControls.TryGetValue(paneId, out var terminal) && !needsDirectorySelection)
+            _terminalControls.TryGetValue(paneId, out var terminal);
+
+            if (!hasPendingOverlay)
             {
-                terminal = new TerminalControl { PaneId = paneId };
+                terminal ??= new TerminalControl { PaneId = paneId };
                 await sessionManager.EnsureStartedAsync(paneId, workingDirectory);
                 var session = sessionManager.GetOrCreateSession(paneId);
                 await terminal.AttachSession(session);
@@ -166,7 +171,7 @@ public sealed partial class SplitPaneContainer : UserControl
             _paneOverlays[paneId] = tintOverlay;
 
             var innerGrid = new Grid();
-            if (!needsDirectorySelection && terminal != null)
+            if (!hasPendingOverlay && terminal != null)
                 innerGrid.Children.Add(terminal);
             innerGrid.Children.Add(tintOverlay); // overlay on top
 
@@ -174,11 +179,9 @@ public sealed partial class SplitPaneContainer : UserControl
             {
                 innerGrid.Children.Add(BuildDirectoryLauncherOverlay(paneId));
             }
-            else
+            else if (agentChoices.Count > 0)
             {
-                var agentChoices = sessionManager.GetPendingAgentChoices(paneId);
-                if (agentChoices.Count > 1)
-                    innerGrid.Children.Add(BuildAgentLauncherOverlay(paneId, agentChoices, sessionManager));
+                innerGrid.Children.Add(BuildAgentLauncherOverlay(paneId, agentChoices, sessionManager));
             }
 
             var wrapper = new Border
@@ -319,7 +322,10 @@ public sealed partial class SplitPaneContainer : UserControl
             HorizontalAlignment = HorizontalAlignment.Center
         };
 
-        foreach (var agent in agentChoices)
+        // Append "Blank" option so users can open a plain shell
+        var allChoices = agentChoices.Concat([AgentCliKind.None]);
+
+        foreach (var agent in allChoices)
         {
             var buttonContent = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
             buttonContent.Children.Add(CreateAgentLogo(agent));
@@ -344,8 +350,9 @@ public sealed partial class SplitPaneContainer : UserControl
             button.Click += async (s, e) =>
             {
                 button.IsEnabled = false;
-                await sessionManager.LaunchAgentAsync(paneId, agent);
                 host.Visibility = Visibility.Collapsed;
+                await sessionManager.LaunchAgentAsync(paneId, agent);
+                RefreshRequested?.Invoke();
             };
             buttons.Children.Add(button);
         }
@@ -409,6 +416,7 @@ public sealed partial class SplitPaneContainer : UserControl
         AgentCliKind.Claude => "Claude",
         AgentCliKind.Codex => "Codex",
         AgentCliKind.Gemini => "Gemini",
+        AgentCliKind.None => "Blank",
         _ => agent.ToString()
     };
 
@@ -431,6 +439,7 @@ public sealed partial class SplitPaneContainer : UserControl
         AgentCliKind.Claude => "ms-appx:///Assets/claude.png",
         AgentCliKind.Codex => "ms-appx:///Assets/codex.png",
         AgentCliKind.Gemini => "ms-appx:///Assets/gemini.png",
+        AgentCliKind.None => "ms-appx:///ico.ico",
         _ => "ms-appx:///ico.ico"
     };
 
@@ -439,6 +448,7 @@ public sealed partial class SplitPaneContainer : UserControl
         AgentCliKind.Claude => Windows.UI.Color.FromArgb(255, 0xfd, 0x97, 0x1f),
         AgentCliKind.Codex => Windows.UI.Color.FromArgb(255, 0xa6, 0xe2, 0x2e),
         AgentCliKind.Gemini => Windows.UI.Color.FromArgb(255, 0xae, 0x81, 0xff),
+        AgentCliKind.None => Windows.UI.Color.FromArgb(255, 0x75, 0x71, 0x5e),
         _ => Windows.UI.Color.FromArgb(255, 0xf8, 0xf8, 0xf2)
     };
 

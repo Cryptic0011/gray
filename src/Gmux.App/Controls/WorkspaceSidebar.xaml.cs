@@ -38,7 +38,7 @@ public sealed partial class WorkspaceSidebar : UserControl
             {
                 Id = w.Id,
                 Name = w.Name,
-                GitBranch = w.GitBranch != null ? $"\ue0a0 {w.GitBranch}" : "",
+                GitBranch = w.GitBranch ?? string.Empty,
                 ShortPath = ShortenPath(w.WorkingDirectory),
                 UnreadCount = App.AgentMonitor.WaitingCountForPanes(
                     w.Tabs.SelectMany(t => t.RootSplit.GetAllPaneIds())),
@@ -280,6 +280,8 @@ public sealed partial class WorkspaceSidebar : UserControl
         public string ShortPath { get; set; } = string.Empty;
         public int UnreadCount { get; set; }
         public bool IsActive { get; set; }
+        public string GitBranchLabel => string.IsNullOrWhiteSpace(GitBranch) ? string.Empty : $"git: {GitBranch}";
+        public Visibility GitBranchVisibility => string.IsNullOrWhiteSpace(GitBranch) ? Visibility.Collapsed : Visibility.Visible;
         public Visibility BadgeVisibility => UnreadCount > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 }

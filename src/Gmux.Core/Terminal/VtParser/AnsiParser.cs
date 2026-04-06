@@ -121,6 +121,13 @@ public class AnsiParser
                         _buffer.Clear();
                         _state = ParserState.Ground;
                         break;
+                    case 'P': // DCS - Device Control String
+                    case '^': // PM - Privacy Message
+                    case '_': // APC - Application Program Command
+                        // String sequences terminated by ST (ESC \) — reuse OscString state
+                        _state = ParserState.OscString;
+                        _params.Clear();
+                        break;
                     default:
                         _state = ParserState.Ground;
                         break;
@@ -134,12 +141,12 @@ public class AnsiParser
 
             case ParserState.CsiEntry:
                 if (c == '\x1b') { _state = ParserState.Escape; break; }
-                if (c == '?')
+                if (c is '?' or '>' or '<' or '=')
                 {
                     _privateMode = true;
                     _state = ParserState.CsiParam;
                 }
-                else if (c is >= '0' and <= '9' or ';')
+                else if (c is >= '0' and <= '9' or ';' or ':')
                 {
                     _params.Append(c);
                     _state = ParserState.CsiParam;
@@ -158,7 +165,7 @@ public class AnsiParser
 
             case ParserState.CsiParam:
                 if (c == '\x1b') { _state = ParserState.Escape; break; }
-                if (c is >= '0' and <= '9' or ';')
+                if (c is >= '0' and <= '9' or ';' or ':')
                 {
                     _params.Append(c);
                 }
@@ -220,7 +227,8 @@ public class AnsiParser
         if (_params.Length == 0)
             return [defaultValue];
 
-        var parts = _params.ToString().Split(';');
+        // Treat ':' (sub-parameter delimiter) the same as ';' for parameter parsing
+        var parts = _params.ToString().Split(';', ':');
         var result = new int[parts.Length];
         for (int i = 0; i < parts.Length; i++)
         {

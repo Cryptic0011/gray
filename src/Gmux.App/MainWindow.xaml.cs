@@ -16,7 +16,14 @@ public sealed partial class MainWindow : Window
     private AppWindow _appWindow = null!;
     private DispatcherTimer? _stateSaveTimer;
     private DispatcherTimer? _notificationDismissTimer;
+    private DispatcherTimer? _waitingNotificationDelayTimer;
     private string? _lastWaitingNotificationSignature;
+    private string? _pendingWaitingNotificationSignature;
+    private string? _pendingWaitingNotificationTitle;
+    private string? _pendingWaitingNotificationMessage;
+    private bool _isLoadingActiveTab;
+    private bool _pendingActiveTabLoad;
+    private static readonly TimeSpan WaitingNotificationDelay = TimeSpan.FromSeconds(1.5);
 
     public MainWindow()
     {
@@ -60,6 +67,7 @@ public sealed partial class MainWindow : Window
         PaneContainer.NewTabRequested += OnContextNewTab;
         PaneContainer.ChangeDirectoryRequested += OnContextChangeDirectory;
         PaneContainer.InitialDirectorySelectionRequested += OnInitialDirectorySelectionRequested;
+        PaneContainer.RefreshRequested += () => DispatcherQueue.TryEnqueue(RequestActiveTabLoad);
         _focusManager.FocusChanged += OnFocusChanged;
 
         // Agent monitor — refresh UI when waiting state changes
@@ -183,8 +191,7 @@ public sealed partial class MainWindow : Window
             paneId,
             folder.Path,
             App.SettingsManager.Current.GetEnabledAgentClis());
-
-        await LoadActiveTabAsync();
+        RequestActiveTabLoad();
     }
 
     private async Task<Windows.Storage.StorageFolder?> PickFolderAsync()
@@ -207,7 +214,7 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(() =>
         {
             RefreshTabBar();
-            _ = LoadActiveTabAsync();
+            RequestActiveTabLoad();
         });
     }
 
@@ -217,14 +224,14 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(() =>
         {
             RefreshTabBar();
-            _ = LoadActiveTabAsync();
+            RequestActiveTabLoad();
         });
     }
 
     private void OnSplitTreeChanged()
     {
         QueueStateSave();
-        DispatcherQueue.TryEnqueue(() => _ = LoadActiveTabAsync());
+        DispatcherQueue.TryEnqueue(RequestActiveTabLoad);
     }
 
     private void OnPaneFocused(Guid paneId)
@@ -363,6 +370,32 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void RequestActiveTabLoad()
+    {
+        _pendingActiveTabLoad = true;
+        if (_isLoadingActiveTab)
+            return;
+
+        _ = ProcessActiveTabLoadsAsync();
+    }
+
+    private async Task ProcessActiveTabLoadsAsync()
+    {
+        _isLoadingActiveTab = true;
+        try
+        {
+            while (_pendingActiveTabLoad)
+            {
+                _pendingActiveTabLoad = false;
+                await LoadActiveTabAsync();
+            }
+        }
+        finally
+        {
+            _isLoadingActiveTab = false;
+        }
+    }
+
     private async Task LoadActiveTabAsync()
     {
         var workspace = App.WorkspaceManager.ActiveWorkspace;
@@ -421,6 +454,10 @@ public sealed partial class MainWindow : Window
 
         if (waitingTabs.Count == 0)
         {
+            _pendingWaitingNotificationSignature = null;
+            _pendingWaitingNotificationTitle = null;
+            _pendingWaitingNotificationMessage = null;
+            _waitingNotificationDelayTimer?.Stop();
             _lastWaitingNotificationSignature = null;
             _notificationDismissTimer?.Stop();
             NotificationBar.IsOpen = false;
@@ -436,12 +473,40 @@ public sealed partial class MainWindow : Window
         if (signature == _lastWaitingNotificationSignature)
             return;
 
-        _lastWaitingNotificationSignature = signature;
-
-        NotificationBar.Title = totalWaiting == 1 ? "Agent waiting" : "Agents waiting in multiple panes";
-        NotificationBar.Message = waitingTabs.Count == 1
+        var title = totalWaiting == 1 ? "Agent waiting" : "Agents waiting in multiple panes";
+        var message = waitingTabs.Count == 1
             ? $"{waitingTabs[0].WorkspaceName} / {waitingTabs[0].TabTitle} needs input"
             : $"{totalWaiting} panes across {waitingTabs.Count} tabs need input";
+
+        if (signature == _pendingWaitingNotificationSignature)
+            return;
+
+        _pendingWaitingNotificationSignature = signature;
+        _pendingWaitingNotificationTitle = title;
+        _pendingWaitingNotificationMessage = message;
+
+        _waitingNotificationDelayTimer ??= new DispatcherTimer();
+        _waitingNotificationDelayTimer.Interval = WaitingNotificationDelay;
+        _waitingNotificationDelayTimer.Stop();
+        _waitingNotificationDelayTimer.Tick -= OnWaitingNotificationDelayTimerTick;
+        _waitingNotificationDelayTimer.Tick += OnWaitingNotificationDelayTimerTick;
+        _waitingNotificationDelayTimer.Start();
+    }
+
+    private void OnWaitingNotificationDelayTimerTick(object? sender, object e)
+    {
+        _waitingNotificationDelayTimer?.Stop();
+
+        if (string.IsNullOrWhiteSpace(_pendingWaitingNotificationSignature) ||
+            string.IsNullOrWhiteSpace(_pendingWaitingNotificationTitle) ||
+            string.IsNullOrWhiteSpace(_pendingWaitingNotificationMessage))
+        {
+            return;
+        }
+
+        _lastWaitingNotificationSignature = _pendingWaitingNotificationSignature;
+        NotificationBar.Title = _pendingWaitingNotificationTitle;
+        NotificationBar.Message = _pendingWaitingNotificationMessage;
         NotificationBar.Severity = InfoBarSeverity.Warning;
         NotificationBar.IsOpen = true;
         AutoDismissNotification();

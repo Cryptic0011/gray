@@ -30,6 +30,7 @@ public class AgentMonitorService : IDisposable
     private readonly object _lock = new();
     private readonly Dictionary<Guid, PaneAgentState> _paneStates = new();
     private readonly Dictionary<Guid, DateTime> _workingStartTime = new();
+    private readonly HashSet<Guid> _paneHasUserInput = new();
     private readonly System.Timers.Timer _debounceTimer;
 
     // Pane must be in Working state for this long before transition to Waiting.
@@ -82,6 +83,33 @@ public class AgentMonitorService : IDisposable
     }
 
     /// <summary>
+    /// Start or restart tracking for a freshly launched agent pane.
+    /// Until the user submits input, startup transitions should not produce
+    /// "agent waiting" notifications.
+    /// </summary>
+    public void RegisterAgentLaunch(Guid paneId)
+    {
+        lock (_lock)
+        {
+            _paneStates[paneId] = PaneAgentState.Idle;
+            _workingStartTime.Remove(paneId);
+            _paneHasUserInput.Remove(paneId);
+        }
+    }
+
+    /// <summary>
+    /// Marks that the user has sent input to the agent after launch, enabling
+    /// the normal prompt -> working -> waiting notification cycle.
+    /// </summary>
+    public void MarkUserInput(Guid paneId)
+    {
+        lock (_lock)
+        {
+            _paneHasUserInput.Add(paneId);
+        }
+    }
+
+    /// <summary>
     /// Feed the raw prompt detection result for a pane. The state machine
     /// decides whether to fire a notification based on transitions.
     /// </summary>
@@ -90,6 +118,7 @@ public class AgentMonitorService : IDisposable
         lock (_lock)
         {
             _paneStates.TryGetValue(paneId, out var current); // default = Idle
+            bool hasUserInput = _paneHasUserInput.Contains(paneId);
 
             // promptVisible here means "Claude appears idle" (prompt + low output rate).
             bool workingLongEnough = current == PaneAgentState.Working
@@ -103,9 +132,11 @@ public class AgentMonitorService : IDisposable
                 (PaneAgentState.Idle, true) => PaneAgentState.PromptSeen,
 
                 // PromptSeen: Claude showed its initial prompt (idle after startup).
-                // When output starts flowing, Claude started working.
+                // Only enter the work/wait cycle after real user input; startup
+                // redraws should not count as Claude "working on a prompt".
                 (PaneAgentState.PromptSeen, true) => PaneAgentState.PromptSeen,
-                (PaneAgentState.PromptSeen, false) => PaneAgentState.Working,
+                (PaneAgentState.PromptSeen, false) when hasUserInput => PaneAgentState.Working,
+                (PaneAgentState.PromptSeen, false) => PaneAgentState.PromptSeen,
 
                 // Working: only transition to Waiting after minimum working duration.
                 (PaneAgentState.Working, false) => PaneAgentState.Working,
@@ -176,6 +207,7 @@ public class AgentMonitorService : IDisposable
             changed = _paneStates.TryGetValue(paneId, out var current) && current == PaneAgentState.Waiting;
             _paneStates.Remove(paneId);
             _workingStartTime.Remove(paneId);
+            _paneHasUserInput.Remove(paneId);
         }
         lock (_detectionLog)
         {

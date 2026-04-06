@@ -25,11 +25,12 @@ public class AppSettings
         return result;
     }
 
-    public string GetLaunchCommand(AgentCliKind agent) => agent switch
+    public string? GetLaunchCommand(AgentCliKind agent) => agent switch
     {
         AgentCliKind.Claude => ClaudeLaunchCommand,
         AgentCliKind.Codex => CodexLaunchCommand,
         AgentCliKind.Gemini => GeminiLaunchCommand,
+        AgentCliKind.None => null,
         _ => throw new ArgumentOutOfRangeException(nameof(agent), agent, null)
     };
 }
