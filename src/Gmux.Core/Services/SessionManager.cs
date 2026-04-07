@@ -48,7 +48,7 @@ public class SessionManager : IDisposable
                 _trackedAgentPanes.Add(paneId);
                 _agentMonitor?.RegisterAgentLaunch(paneId);
             }
-            else if (_trackedAgentPanes.Contains(paneId))
+            else if (_trackedAgentPanes.Contains(paneId) && IsRealUserInput(text))
             {
                 _agentMonitor?.MarkUserInput(paneId);
             }
@@ -64,6 +64,7 @@ public class SessionManager : IDisposable
             var monitor = _agentMonitor;
             var checkLock = new object();
             int outputEventCount = 0;
+            int prevWindowCount = 0; // events from the previous window — smooths resets
             DateTime windowStart = DateTime.UtcNow;
             DateTime lastCheck = DateTime.MinValue;
 
@@ -81,16 +82,25 @@ public class SessionManager : IDisposable
                         return;
                     }
 
-                    // Count output events in 3-second sliding window
+                    // Sliding-window output rate with overlap to avoid reset discontinuity.
+                    // After 3 seconds the window rotates: the current count becomes the
+                    // "previous" count and we blend the two to keep the rate smooth.
                     double windowSeconds = (now - windowStart).TotalSeconds;
-                    double eventsPerSecond = windowSeconds > 0 ? outputEventCount / windowSeconds : 0;
 
-                    // Reset window periodically to keep it current
                     if (windowSeconds >= 3)
                     {
+                        prevWindowCount = outputEventCount;
                         outputEventCount = 0;
                         windowStart = now;
+                        windowSeconds = 0;
                     }
+
+                    // Blend: weight previous window inversely with elapsed time so it
+                    // fades out over the first ~1.5 seconds of the new window.
+                    double blendWeight = Math.Max(0, 1.0 - windowSeconds / 1.5);
+                    double effectiveCount = outputEventCount + prevWindowCount * blendWeight;
+                    double effectiveWindow = windowSeconds + 3.0 * blendWeight;
+                    double eventsPerSecond = effectiveWindow > 0.1 ? effectiveCount / effectiveWindow : 0;
 
                     bool promptVisible = AgentMonitorService.DetectAgentPrompt(session.Buffer);
                     // Cursor blinks: ~1-2 events/sec. Claude working: 5+ events/sec.
@@ -321,6 +331,24 @@ public class SessionManager : IDisposable
     {
         foreach (var session in _sessions.Values)
             session.ApplySettings(_settingsManager.Current.ScrollbackSize);
+    }
+
+    /// <summary>
+    /// Returns true only for printable text input — the kind that means the user
+    /// is actually typing into the agent prompt. Excludes escape sequences (arrow
+    /// keys, scroll-in-alternate-buffer, bracketed paste markers) and lone control
+    /// characters so that merely clicking into a pane and scrolling doesn't fool
+    /// the state machine into thinking the user submitted a prompt.
+    /// </summary>
+    private static bool IsRealUserInput(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        // Escape sequences (arrow keys, scroll, function keys, bracketed paste)
+        if (text[0] == '\x1b') return false;
+        // Single control character (bare Enter, Tab, Ctrl+C, etc.) — not a prompt
+        if (text.Length == 1 && char.IsControl(text[0])) return false;
+        // Multi-char string with at least one printable character — real typing
+        return true;
     }
 
     private static bool LooksLikeAgentLaunch(string text)

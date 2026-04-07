@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Gmux.Core.Models;
@@ -9,6 +10,15 @@ public sealed partial class WorkspaceSidebar : UserControl
 {
     private bool _suppressSelection;
 
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    private const uint WM_NCLBUTTONDOWN = 0x00A1;
+    private static readonly IntPtr HT_CAPTION = new(2);
+
     public WorkspaceSidebar()
     {
         InitializeComponent();
@@ -17,6 +27,15 @@ public sealed partial class WorkspaceSidebar : UserControl
         App.AgentMonitor.StateChanged += RefreshList;
         Loaded += (s, e) => RefreshList();
         WorkspaceList.SelectionChanged += OnWorkspaceSelected;
+
+        // Make the sidebar header act as a window drag region
+        SidebarHeader.PointerPressed += (s, e) =>
+        {
+            if (!e.GetCurrentPoint(SidebarHeader).Properties.IsLeftButtonPressed) return;
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindowInstance);
+            ReleaseCapture();
+            SendMessage(hwnd, WM_NCLBUTTONDOWN, HT_CAPTION, IntPtr.Zero);
+        };
     }
 
     private void OnWorkspaceSelected(object sender, SelectionChangedEventArgs e)
@@ -115,7 +134,7 @@ public sealed partial class WorkspaceSidebar : UserControl
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
             var paneId = ws.ActiveTab?.RootSplit.GetAllPaneIds().FirstOrDefault();
             if (paneId.HasValue && paneId.Value != default && App.SessionManager != null)
-                App.SessionManager.ConfigurePendingPane(paneId.Value, ws.WorkingDirectory, App.SettingsManager.Current.GetEnabledAgentClis());
+                App.SessionManager.RequireDirectorySelection(paneId.Value);
         }
     }
 

@@ -212,13 +212,17 @@ public class AgentMonitorService : IDisposable
             if (changed)
             {
                 _paneStates[paneId] = PaneAgentState.Dismissed;
-                _paneHasUserInput.Remove(paneId); // require new input before re-entering work/wait cycle
                 Log($"Pane {paneId.ToString()[..8]} : Waiting → Dismissed (user clicked)");
             }
             else
             {
-                Log($"Pane {paneId.ToString()[..8]} : Dismiss called but state is {current} — no-op");
+                Log($"Pane {paneId.ToString()[..8]} : Dismiss called in state {current} — clearing user input flag");
             }
+            // Always clear user input on focus, regardless of state.
+            // This prevents a previous MarkUserInput from enabling the
+            // PromptSeen→Working transition after the user merely visits
+            // and leaves the pane without actually prompting the agent.
+            _paneHasUserInput.Remove(paneId);
         }
         if (changed)
             StateChanged?.Invoke();

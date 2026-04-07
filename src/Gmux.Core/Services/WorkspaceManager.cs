@@ -154,6 +154,20 @@ public class WorkspaceManager
         ActiveTabChanged?.Invoke();
     }
 
+    public void MoveTab(Guid workspaceId, Guid tabId, int newIndex)
+    {
+        var workspace = _workspaces.FirstOrDefault(w => w.Id == workspaceId);
+        if (workspace == null) return;
+
+        var oldIndex = workspace.Tabs.FindIndex(t => t.Id == tabId);
+        if (oldIndex < 0 || newIndex < 0 || newIndex >= workspace.Tabs.Count || oldIndex == newIndex) return;
+
+        var tab = workspace.Tabs[oldIndex];
+        workspace.Tabs.RemoveAt(oldIndex);
+        workspace.Tabs.Insert(newIndex, tab);
+        ActiveTabChanged?.Invoke();
+    }
+
     public void CycleTab(Guid workspaceId, int direction)
     {
         var workspace = _workspaces.FirstOrDefault(w => w.Id == workspaceId);

@@ -15,6 +15,7 @@ public partial class App : Application
     public static UpdateCheckerService UpdateChecker { get; } = new();
     public static PipeServer PipeServer { get; } = new();
     public static SessionManager? SessionManager { get; set; }
+    public static Window? MainWindowInstance { get; private set; }
 
     public App()
     {
@@ -26,6 +27,7 @@ public partial class App : Application
         await SettingsManager.LoadAsync();
 
         _window = new MainWindow();
+        MainWindowInstance = _window;
         _window.Activate();
 
         // Start IPC server

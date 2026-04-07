@@ -258,6 +258,21 @@ public sealed partial class MainWindow : Window
 
     // --- Tab Bar ---
 
+    // Tab drag state — manual pointer-based reorder
+    private Guid? _dragTabId;
+    private Guid _dragTabWsId;
+    private Windows.Foundation.Point _dragStartPoint;
+    private bool _isDraggingTab;
+    private bool _tabRenameActive;
+    private const double DragThreshold = 8;
+
+    // Monokai palette constants
+    private static readonly Windows.UI.Color TabBg = Windows.UI.Color.FromArgb(255, 0x3e, 0x3d, 0x32);
+    private static readonly Windows.UI.Color TabActiveBg = Windows.UI.Color.FromArgb(255, 0x66, 0xd9, 0xef);
+    private static readonly Windows.UI.Color TabActiveFg = Windows.UI.Color.FromArgb(255, 0x27, 0x28, 0x22);
+    private static readonly Windows.UI.Color TabFg = Windows.UI.Color.FromArgb(255, 0xf8, 0xf8, 0xf2);
+    private static readonly Windows.UI.Color TabDragOverBg = Windows.UI.Color.FromArgb(255, 0x49, 0x48, 0x3e);
+
     private void RefreshTabBar()
     {
         TabBar.Children.Clear();
@@ -266,13 +281,19 @@ public sealed partial class MainWindow : Window
 
         foreach (var tab in workspace.Tabs)
         {
-            var tabPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            var tabId = tab.Id;
+            var wsId = workspace.Id;
+            bool isActive = tab.Id == workspace.ActiveTabId;
 
             var titleBlock = new TextBlock
             {
                 Text = tab.Title,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(isActive ? TabActiveFg : TabFg),
+                FontWeight = isActive ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
             };
+
+            var tabPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, IsHitTestVisible = false };
             tabPanel.Children.Add(titleBlock);
 
             // Badge showing number of panes waiting for input in this tab
@@ -282,7 +303,7 @@ public sealed partial class MainWindow : Window
                 var badge = new Border
                 {
                     Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                        Windows.UI.Color.FromArgb(255, 0xfd, 0x97, 0x1f)), // Monokai orange — matches pane border
+                        Windows.UI.Color.FromArgb(255, 0xfd, 0x97, 0x1f)),
                     CornerRadius = new CornerRadius(8),
                     Padding = new Thickness(5, 1, 5, 1),
                     VerticalAlignment = VerticalAlignment.Center,
@@ -290,49 +311,29 @@ public sealed partial class MainWindow : Window
                     {
                         Text = waitingCount.ToString(),
                         FontSize = 10,
-                        Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                            Windows.UI.Color.FromArgb(255, 0x27, 0x28, 0x22)),
+                        Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(TabActiveFg),
                         FontWeight = Microsoft.UI.Text.FontWeights.Bold,
                     }
                 };
                 tabPanel.Children.Add(badge);
             }
 
-            // "..." menu button with Rename (and Close if multiple tabs)
-            var tabId = tab.Id;
-            var wsId = workspace.Id;
+            // "..." menu button
             var menuBtn = new Button
             {
-                Content = "\u22EF", // ⋯
+                Content = "\u22EF",
                 Padding = new Thickness(4, 0, 4, 0),
                 FontSize = 12,
                 MinWidth = 0,
                 MinHeight = 0,
-                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                    Windows.UI.Color.FromArgb(0, 0, 0, 0)),
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0)),
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(isActive ? TabActiveFg : TabFg),
                 VerticalAlignment = VerticalAlignment.Center,
             };
 
             var menuFlyout = new MenuFlyout();
-
             var renameItem = new MenuFlyoutItem { Text = "Rename" };
-            renameItem.Click += async (s, e) =>
-            {
-                var t = workspace.Tabs.FirstOrDefault(t => t.Id == tabId);
-                if (t == null) return;
-                var textBox = new TextBox { Text = t.Title, SelectionStart = 0, SelectionLength = t.Title.Length };
-                var dialog = new ContentDialog
-                {
-                    Title = "Rename Tab",
-                    Content = textBox,
-                    PrimaryButtonText = "Rename",
-                    CloseButtonText = "Cancel",
-                    DefaultButton = ContentDialogButton.Primary,
-                    XamlRoot = Content.XamlRoot,
-                };
-                if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-                    App.WorkspaceManager.RenameTab(wsId, tabId, textBox.Text);
-            };
+            renameItem.Click += (s, e) => BeginTabInlineRename(wsId, tabId);
             menuFlyout.Items.Add(renameItem);
 
             if (workspace.Tabs.Count > 1)
@@ -345,30 +346,202 @@ public sealed partial class MainWindow : Window
                 };
                 menuFlyout.Items.Add(closeItem);
             }
-
             menuBtn.Flyout = menuFlyout;
-            tabPanel.Children.Add(menuBtn);
 
-            var tabButton = new Button
+            var contentGrid = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = GridLength.Auto }, new ColumnDefinition { Width = GridLength.Auto } }, ColumnSpacing = 4 };
+            Grid.SetColumn(tabPanel, 0);
+            Grid.SetColumn(menuBtn, 1);
+            contentGrid.Children.Add(tabPanel);
+            contentGrid.Children.Add(menuBtn);
+
+            var tabElement = new Border
             {
-                Content = tabPanel,
                 Tag = tab.Id,
+                Child = contentGrid,
                 Padding = new Thickness(12, 6, 12, 6),
                 Margin = new Thickness(0, 0, 2, 0),
+                CornerRadius = new CornerRadius(4),
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(isActive ? TabActiveBg : TabBg),
             };
 
-            if (tab.Id == workspace.ActiveTabId)
+            // Pointer events for click, double-click, and drag reorder
+            tabElement.PointerPressed += (s, e) =>
             {
-                tabButton.Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["AccentButtonStyle"];
+                if (s is not Border b) return;
+                var pt = e.GetCurrentPoint(b);
+                if (!pt.Properties.IsLeftButtonPressed) return;
+
+                _dragTabId = tabId;
+                _dragTabWsId = wsId;
+                _dragStartPoint = pt.Position;
+                _isDraggingTab = false;
+                b.CapturePointer(e.Pointer);
+                e.Handled = true;
+            };
+
+            tabElement.PointerMoved += (s, e) =>
+            {
+                if (_dragTabId == null || _dragTabId.Value != tabId) return;
+                if (s is not Border b) return;
+
+                var pt = e.GetCurrentPoint(TabBar).Position;
+                if (!_isDraggingTab)
+                {
+                    var current = e.GetCurrentPoint(b).Position;
+                    double dx = current.X - _dragStartPoint.X;
+                    double dy = current.Y - _dragStartPoint.Y;
+                    if (Math.Abs(dx) < DragThreshold && Math.Abs(dy) < DragThreshold) return;
+                    _isDraggingTab = true;
+                    b.Opacity = 0.6;
+                }
+
+                // Find which tab we're hovering over and do a live reorder
+                for (int i = 0; i < TabBar.Children.Count; i++)
+                {
+                    if (TabBar.Children[i] is not Border target) continue;
+                    if (target.Tag is not Guid targetId || targetId == tabId) continue;
+
+                    var transform = target.TransformToVisual(TabBar);
+                    var targetPos = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                    double targetMid = targetPos.X + target.ActualWidth / 2;
+
+                    if (pt.X >= targetPos.X && pt.X <= targetPos.X + target.ActualWidth)
+                    {
+                        var ws = App.WorkspaceManager.ActiveWorkspace;
+                        if (ws == null) break;
+                        App.WorkspaceManager.MoveTab(ws.Id, tabId, i);
+                        break;
+                    }
+                }
+
+                e.Handled = true;
+            };
+
+            tabElement.PointerReleased += (s, e) =>
+            {
+                // If a double-tap rename just started, skip activation
+                if (_tabRenameActive)
+                {
+                    _tabRenameActive = false;
+                    e.Handled = true;
+                    return;
+                }
+
+                if (_dragTabId == null || _dragTabId.Value != tabId) return;
+                if (s is Border b)
+                {
+                    try { b.ReleasePointerCapture(e.Pointer); } catch { }
+                    b.Opacity = 1.0;
+                }
+
+                if (!_isDraggingTab)
+                {
+                    // It was a click, not a drag — activate tab (only if not already active,
+                    // so the element survives for DoubleTapped to fire on a second click)
+                    var ws = App.WorkspaceManager.ActiveWorkspace;
+                    if (ws == null || ws.ActiveTabId != tabId)
+                        App.WorkspaceManager.ActivateTab(_dragTabWsId, tabId);
+                }
+
+                _dragTabId = null;
+                _isDraggingTab = false;
+                e.Handled = true;
+            };
+
+            tabElement.PointerCaptureLost += (s, e) =>
+            {
+                if (s is Border b) b.Opacity = 1.0;
+                _dragTabId = null;
+                _isDraggingTab = false;
+            };
+
+            // Double-tap — inline rename
+            tabElement.DoubleTapped += (s, e) =>
+            {
+                if (s is Border b)
+                {
+                    try { b.ReleasePointerCaptures(); } catch { }
+                }
+                _dragTabId = null;
+                _isDraggingTab = false;
+                _tabRenameActive = true;
+                BeginTabInlineRename(wsId, tabId);
+                e.Handled = true;
+            };
+
+            // Hover highlight for drag targets
+            tabElement.DragEnter += (s, e) =>
+            {
+                if (s is Border b && _dragTabId.HasValue && _dragTabId.Value != tabId)
+                    b.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(TabDragOverBg);
+            };
+            tabElement.DragLeave += (s, e) =>
+            {
+                if (s is Border b)
+                {
+                    var ws = App.WorkspaceManager.ActiveWorkspace;
+                    bool active = ws?.ActiveTabId == tabId;
+                    b.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(active ? TabActiveBg : TabBg);
+                }
+            };
+
+            TabBar.Children.Add(tabElement);
+        }
+    }
+
+    private void BeginTabInlineRename(Guid wsId, Guid tabId)
+    {
+        var workspace = App.WorkspaceManager.Workspaces.FirstOrDefault(w => w.Id == wsId);
+        var tab = workspace?.Tabs.FirstOrDefault(t => t.Id == tabId);
+        if (tab == null) return;
+
+        foreach (var child in TabBar.Children)
+        {
+            if (child is Border border && border.Tag is Guid id && id == tabId)
+            {
+                var textBox = new TextBox
+                {
+                    Text = tab.Title,
+                    SelectionStart = 0,
+                    SelectionLength = tab.Title.Length,
+                    MinWidth = 60,
+                    Padding = new Thickness(4, 2, 4, 2),
+                    FontSize = 14,
+                };
+
+                var originalChild = border.Child;
+                border.Child = textBox;
+                textBox.Focus(FocusState.Programmatic);
+
+                bool committed = false;
+                void CommitRename()
+                {
+                    if (committed) return;
+                    committed = true;
+                    var newTitle = textBox.Text;
+                    border.Child = originalChild;
+                    if (!string.IsNullOrWhiteSpace(newTitle) && newTitle != tab.Title)
+                        App.WorkspaceManager.RenameTab(wsId, tabId, newTitle);
+                }
+
+                textBox.LostFocus += (s, e) => CommitRename();
+                textBox.KeyDown += (s, e) =>
+                {
+                    if (e.Key == Windows.System.VirtualKey.Enter)
+                    {
+                        CommitRename();
+                        e.Handled = true;
+                    }
+                    else if (e.Key == Windows.System.VirtualKey.Escape)
+                    {
+                        committed = true;
+                        border.Child = originalChild;
+                        e.Handled = true;
+                    }
+                };
+
+                break;
             }
-
-            tabButton.Click += (s, e) =>
-            {
-                if (s is Button btn && btn.Tag is Guid id)
-                    App.WorkspaceManager.ActivateTab(workspace.Id, id);
-            };
-
-            TabBar.Children.Add(tabButton);
         }
     }
 
@@ -708,7 +881,7 @@ public sealed partial class MainWindow : Window
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
                 var newWsPaneId = newWs.ActiveTab?.RootSplit.GetAllPaneIds().FirstOrDefault();
                 if (newWsPaneId.HasValue && newWsPaneId.Value != default)
-                    _sessionManager.ConfigurePendingPane(newWsPaneId.Value, newWs.WorkingDirectory, App.SettingsManager.Current.GetEnabledAgentClis());
+                    _sessionManager.RequireDirectorySelection(newWsPaneId.Value);
                 e.Handled = true;
                 break;
 
