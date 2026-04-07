@@ -12,8 +12,8 @@ public class SessionManager : IDisposable
     private readonly Dictionary<Guid, TerminalSession> _sessions = new();
     private readonly Dictionary<Guid, System.Timers.Timer> _pollTimers = new();
     private readonly Dictionary<Guid, string> _pendingWorkingDirs = new();
-    private readonly Dictionary<Guid, AgentCliKind> _pendingAutoLaunchAgents = new();
-    private readonly Dictionary<Guid, IReadOnlyList<AgentCliKind>> _pendingAgentChoices = new();
+    private readonly Dictionary<Guid, TerminalLaunchOption> _pendingAutoLaunchAgents = new();
+    private readonly Dictionary<Guid, IReadOnlyList<TerminalLaunchOption>> _pendingAgentChoices = new();
     private readonly HashSet<Guid> _pendingDirectorySelections = new();
     private readonly HashSet<Guid> _trackedAgentPanes = new();
     private readonly string _defaultWorkingDirectory;
@@ -177,7 +177,7 @@ public class SessionManager : IDisposable
     /// Set pane startup behavior: inherit working directory, then either auto-launch
     /// the single configured agent or show a chooser when multiple are enabled.
     /// </summary>
-    public void ConfigurePendingPane(Guid paneId, string workingDirectory, IReadOnlyList<AgentCliKind> enabledAgents)
+    public void ConfigurePendingPane(Guid paneId, string workingDirectory, IReadOnlyList<TerminalLaunchOption> enabledAgents)
     {
         _pendingWorkingDirs[paneId] = workingDirectory;
         _pendingDirectorySelections.Remove(paneId);
@@ -196,9 +196,10 @@ public class SessionManager : IDisposable
             return;
         }
 
-        if (enabledAgents.Contains(settings.PreferredAgent))
+        var preferred = enabledAgents.FirstOrDefault(option => option.Agent == settings.PreferredAgent);
+        if (preferred != null)
         {
-            _pendingAutoLaunchAgents[paneId] = settings.PreferredAgent;
+            _pendingAutoLaunchAgents[paneId] = preferred;
         }
         else if (enabledAgents.Count == 1)
         {
@@ -210,14 +211,14 @@ public class SessionManager : IDisposable
         }
     }
 
-    public IReadOnlyList<AgentCliKind> GetPendingAgentChoices(Guid paneId)
+    public IReadOnlyList<TerminalLaunchOption> GetPendingAgentChoices(Guid paneId)
     {
         return _pendingAgentChoices.TryGetValue(paneId, out var choices)
             ? choices
-            : Array.Empty<AgentCliKind>();
+            : Array.Empty<TerminalLaunchOption>();
     }
 
-    public async Task LaunchAgentAsync(Guid paneId, AgentCliKind agent)
+    public async Task LaunchAgentAsync(Guid paneId, TerminalLaunchOption option)
     {
         _pendingAgentChoices.Remove(paneId);
         var session = GetOrCreateSession(paneId);
@@ -225,7 +226,7 @@ public class SessionManager : IDisposable
         if (!wasRunning)
             await EnsureStartedAsync(paneId);
 
-        await LaunchAgentInSessionAsync(paneId, session, agent, waitForShellOutput: !wasRunning);
+        await LaunchAgentInSessionAsync(paneId, session, option, waitForShellOutput: !wasRunning);
     }
 
     public void DestroySession(Guid paneId)
@@ -365,10 +366,10 @@ public class SessionManager : IDisposable
         return false;
     }
 
-    private async Task LaunchAgentInSessionAsync(Guid paneId, TerminalSession session, AgentCliKind agent, bool waitForShellOutput = true)
+    private async Task LaunchAgentInSessionAsync(Guid paneId, TerminalSession session, TerminalLaunchOption option, bool waitForShellOutput = true)
     {
-        var command = _settingsManager.Current.GetLaunchCommand(agent);
-        if (command == null)
+        var command = option.Command;
+        if (string.IsNullOrWhiteSpace(command))
             return; // None — just open a blank shell
 
         _trackedAgentPanes.Add(paneId);

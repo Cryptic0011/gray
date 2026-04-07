@@ -285,7 +285,7 @@ public sealed partial class SplitPaneContainer : UserControl
         };
     }
 
-    private FrameworkElement BuildAgentLauncherOverlay(Guid paneId, IReadOnlyList<AgentCliKind> agentChoices, SessionManager sessionManager)
+    private FrameworkElement BuildAgentLauncherOverlay(Guid paneId, IReadOnlyList<TerminalLaunchOption> agentChoices, SessionManager sessionManager)
     {
         var host = new Border
         {
@@ -299,39 +299,120 @@ public sealed partial class SplitPaneContainer : UserControl
             MinWidth = 280,
         };
 
-        var panel = new StackPanel { Spacing = 12 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Launch agent",
-            FontSize = 18,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xf8, 0xf8, 0xf2)),
-            HorizontalAlignment = HorizontalAlignment.Center
-        });
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Choose which CLI to start in this pane.",
-            Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x75, 0x71, 0x5e)),
-            HorizontalAlignment = HorizontalAlignment.Center
-        });
+        var customChoices = agentChoices.Where(option => option.Agent == null).ToArray();
+        var builtInChoices = agentChoices.Where(option => option.Agent != null).ToArray();
 
-        var buttons = new StackPanel
+        host.Child = BuildLaunchChoicePanel();
+        return host;
+
+        FrameworkElement BuildLaunchChoicePanel()
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = HorizontalAlignment.Center
-        };
+            var panel = new StackPanel { Spacing = 12 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Launch agent",
+                FontSize = 18,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xf8, 0xf8, 0xf2)),
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Choose which CLI to start in this pane.",
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x75, 0x71, 0x5e)),
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
 
-        // Append "Blank" option so users can open a plain shell
-        var allChoices = agentChoices.Concat([AgentCliKind.None]);
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
 
-        foreach (var agent in allChoices)
+            foreach (var option in builtInChoices)
+                buttons.Children.Add(CreateLaunchButton(option, launchOnClick: true));
+
+            if (customChoices.Length > 0)
+            {
+                var customOption = new TerminalLaunchOption
+                {
+                    Title = "Custom",
+                    Command = "custom"
+                };
+                var customButton = CreateLaunchButton(customOption, launchOnClick: false);
+                customButton.Click += (_, _) => host.Child = BuildCustomChoicePanel();
+                buttons.Children.Add(customButton);
+            }
+
+            buttons.Children.Add(CreateLaunchButton(TerminalLaunchOption.BuiltIn(AgentCliKind.None, null), launchOnClick: true));
+
+            panel.Children.Add(buttons);
+            return panel;
+        }
+
+        FrameworkElement BuildCustomChoicePanel()
+        {
+            var panel = new StackPanel { Spacing = 12, MinWidth = 320 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Custom commands",
+                FontSize = 18,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xf8, 0xf8, 0xf2)),
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Choose which command to start in this pane.",
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x75, 0x71, 0x5e)),
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+
+            var commandList = new StackPanel { Spacing = 8 };
+            foreach (var option in customChoices)
+            {
+                var button = new Button
+                {
+                    Content = option.Title,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Padding = new Thickness(14, 9, 14, 9),
+                    Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xf8, 0xf8, 0xf2)),
+                    Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x27, 0x28, 0x22)),
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    CornerRadius = new CornerRadius(8)
+                };
+                button.Click += async (_, _) =>
+                {
+                    button.IsEnabled = false;
+                    host.Visibility = Visibility.Collapsed;
+                    await sessionManager.LaunchAgentAsync(paneId, option);
+                    RefreshRequested?.Invoke();
+                };
+                commandList.Children.Add(button);
+            }
+
+            var backButton = new Button
+            {
+                Content = "Back",
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Padding = new Thickness(14, 8, 14, 8),
+                CornerRadius = new CornerRadius(8)
+            };
+            backButton.Click += (_, _) => host.Child = BuildLaunchChoicePanel();
+
+            panel.Children.Add(commandList);
+            panel.Children.Add(backButton);
+            return panel;
+        }
+
+        Button CreateLaunchButton(TerminalLaunchOption option, bool launchOnClick)
         {
             var buttonContent = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
-            buttonContent.Children.Add(CreateAgentLogo(agent));
+            buttonContent.Children.Add(CreateAgentLogo(option));
             buttonContent.Children.Add(new TextBlock
             {
-                Text = GetAgentLabel(agent),
+                Text = option.Title,
                 FontSize = 11,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x27, 0x28, 0x22)),
@@ -341,25 +422,26 @@ public sealed partial class SplitPaneContainer : UserControl
             {
                 Content = buttonContent,
                 Padding = new Thickness(16, 10, 16, 10),
-                Background = new SolidColorBrush(GetAgentButtonColor(agent)),
+                Background = new SolidColorBrush(GetAgentButtonColor(option)),
                 Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x27, 0x28, 0x22)),
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 CornerRadius = new CornerRadius(8),
                 MinWidth = 88
             };
-            button.Click += async (s, e) =>
-            {
-                button.IsEnabled = false;
-                host.Visibility = Visibility.Collapsed;
-                await sessionManager.LaunchAgentAsync(paneId, agent);
-                RefreshRequested?.Invoke();
-            };
-            buttons.Children.Add(button);
-        }
 
-        panel.Children.Add(buttons);
-        host.Child = panel;
-        return host;
+            if (launchOnClick)
+            {
+                button.Click += async (_, _) =>
+                {
+                    button.IsEnabled = false;
+                    host.Visibility = Visibility.Collapsed;
+                    await sessionManager.LaunchAgentAsync(paneId, option);
+                    RefreshRequested?.Invoke();
+                };
+            }
+
+            return button;
+        }
     }
 
     private FrameworkElement BuildDirectoryLauncherOverlay(Guid paneId)
@@ -411,16 +493,7 @@ public sealed partial class SplitPaneContainer : UserControl
         return host;
     }
 
-    private static string GetAgentLabel(AgentCliKind agent) => agent switch
-    {
-        AgentCliKind.Claude => "Claude",
-        AgentCliKind.Codex => "Codex",
-        AgentCliKind.Gemini => "Gemini",
-        AgentCliKind.None => "Blank",
-        _ => agent.ToString()
-    };
-
-    private static FrameworkElement CreateAgentLogo(AgentCliKind agent)
+    private static FrameworkElement CreateAgentLogo(TerminalLaunchOption option)
     {
         var image = new Image
         {
@@ -428,13 +501,13 @@ public sealed partial class SplitPaneContainer : UserControl
             Height = 28,
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Source = new BitmapImage(new Uri(GetAgentLogoUri(agent)))
+            Source = new BitmapImage(new Uri(GetAgentLogoUri(option.Agent)))
         };
 
         return image;
     }
 
-    private static string GetAgentLogoUri(AgentCliKind agent) => agent switch
+    private static string GetAgentLogoUri(AgentCliKind? agent) => agent switch
     {
         AgentCliKind.Claude => "ms-appx:///Assets/claude.png",
         AgentCliKind.Codex => "ms-appx:///Assets/codex.png",
@@ -443,7 +516,7 @@ public sealed partial class SplitPaneContainer : UserControl
         _ => "ms-appx:///ico.ico"
     };
 
-    private static Windows.UI.Color GetAgentButtonColor(AgentCliKind agent) => agent switch
+    private static Windows.UI.Color GetAgentButtonColor(TerminalLaunchOption option) => option.Agent switch
     {
         AgentCliKind.Claude => Windows.UI.Color.FromArgb(255, 0xfd, 0x97, 0x1f),
         AgentCliKind.Codex => Windows.UI.Color.FromArgb(255, 0xa6, 0xe2, 0x2e),

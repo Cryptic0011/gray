@@ -18,9 +18,9 @@ The app supports:
 Download `gray-installer-win-x64.msi` from the latest GitHub Release and run it.
 
 The installer:
-- installs `gray` to `Program Files`
+- installs `gray` to `%LocalAppData%\Programs\gray`
 - creates a desktop shortcut
-- adds the install directory to system `PATH` so `Gmux.Cli` is available from a shell
+- adds the install directory to user `PATH` so `gray` is available from a new shell
 
 ### Option 2: Portable release
 

@@ -31,6 +31,10 @@ jobs:
       - name: Restore
         run: dotnet restore gmux.sln
 
+      - name: Clean release output
+        shell: pwsh
+        run: Remove-Item -Recurse -Force artifacts, dist -ErrorAction SilentlyContinue
+
       - name: Build
         run: dotnet build gmux.sln --configuration Release --no-restore
 

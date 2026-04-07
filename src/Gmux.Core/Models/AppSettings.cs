@@ -11,6 +11,7 @@ public class AppSettings
     public string ClaudeLaunchCommand { get; set; } = "claude --dangerously-skip-permissions";
     public string CodexLaunchCommand { get; set; } = "codex --yolo";
     public string GeminiLaunchCommand { get; set; } = "gemini --yolo";
+    public List<CustomTerminalCommand> CustomTerminalCommands { get; set; } = new();
     public NotificationScope WaitingNotificationScope { get; set; } = NotificationScope.AllTabs;
     public int WaitingNotificationDurationSeconds { get; set; } = 5;
     public double TerminalFontSize { get; set; } = 14;
@@ -22,6 +23,19 @@ public class AppSettings
         if (UseClaudeCli) result.Add(AgentCliKind.Claude);
         if (UseCodexCli) result.Add(AgentCliKind.Codex);
         if (UseGeminiCli) result.Add(AgentCliKind.Gemini);
+        return result;
+    }
+
+    public IReadOnlyList<TerminalLaunchOption> GetEnabledLaunchOptions()
+    {
+        var result = new List<TerminalLaunchOption>();
+        foreach (var agent in GetEnabledAgentClis())
+            result.Add(TerminalLaunchOption.BuiltIn(agent, GetLaunchCommand(agent)));
+
+        result.AddRange((CustomTerminalCommands ?? [])
+            .Where(command => !string.IsNullOrWhiteSpace(command.Title) && !string.IsNullOrWhiteSpace(command.Command))
+            .Select(TerminalLaunchOption.Custom));
+
         return result;
     }
 

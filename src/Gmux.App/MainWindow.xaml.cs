@@ -113,7 +113,7 @@ public sealed partial class MainWindow : Window
         {
             // Inherit working directory from the source pane
             var sourceDir = _sessionManager.GetWorkingDirectory(paneId) ?? workspace.WorkingDirectory;
-            _sessionManager.ConfigurePendingPane(newId.Value, sourceDir, App.SettingsManager.Current.GetEnabledAgentClis());
+            _sessionManager.ConfigurePendingPane(newId.Value, sourceDir, App.SettingsManager.Current.GetEnabledLaunchOptions());
             _focusManager.SetFocus(newId.Value);
         }
     }
@@ -127,7 +127,7 @@ public sealed partial class MainWindow : Window
         if (newId.HasValue)
         {
             var sourceDir = _sessionManager.GetWorkingDirectory(paneId) ?? workspace.WorkingDirectory;
-            _sessionManager.ConfigurePendingPane(newId.Value, sourceDir, App.SettingsManager.Current.GetEnabledAgentClis());
+            _sessionManager.ConfigurePendingPane(newId.Value, sourceDir, App.SettingsManager.Current.GetEnabledLaunchOptions());
             _focusManager.SetFocus(newId.Value);
         }
     }
@@ -162,7 +162,7 @@ public sealed partial class MainWindow : Window
         {
             var newPaneId = tab.RootSplit.GetAllPaneIds().FirstOrDefault();
             if (newPaneId != default)
-                _sessionManager.ConfigurePendingPane(newPaneId, sourceDir, App.SettingsManager.Current.GetEnabledAgentClis());
+                _sessionManager.ConfigurePendingPane(newPaneId, sourceDir, App.SettingsManager.Current.GetEnabledLaunchOptions());
         }
     }
 
@@ -192,7 +192,7 @@ public sealed partial class MainWindow : Window
         _sessionManager.ConfigurePendingPane(
             paneId,
             folder.Path,
-            App.SettingsManager.Current.GetEnabledAgentClis());
+            App.SettingsManager.Current.GetEnabledLaunchOptions());
         RequestActiveTabLoad();
     }
 

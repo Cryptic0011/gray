@@ -170,6 +170,14 @@ public sealed partial class WorkspaceSidebar : UserControl
         var claudeCommandBox = new TextBox { Text = current.ClaudeLaunchCommand };
         var codexCommandBox = new TextBox { Text = current.CodexLaunchCommand };
         var geminiCommandBox = new TextBox { Text = current.GeminiLaunchCommand };
+        var customCommandRows = new List<(TextBox TitleBox, TextBox CommandBox, FrameworkElement Row)>();
+        var customCommandsPanel = new StackPanel { Spacing = 8 };
+        var previewPanel = new StackPanel { Spacing = 6 };
+        var addCustomCommandButton = new Button
+        {
+            Content = "Add custom command",
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
         var updateStatus = new TextBlock
         {
             Text = "Not checked yet",
@@ -195,6 +203,86 @@ public sealed partial class WorkspaceSidebar : UserControl
         var codexStatus = AppInfoService.GetToolStatus(current.CodexLaunchCommand);
         var geminiStatus = AppInfoService.GetToolStatus(current.GeminiLaunchCommand);
 
+        void RefreshPreview()
+        {
+            previewPanel.Children.Clear();
+
+            void addPreviewLine(string title, string command)
+            {
+                previewPanel.Children.Add(new TextBlock
+                {
+                    Text = string.IsNullOrWhiteSpace(command) ? title : $"{title} - {command}",
+                    TextWrapping = TextWrapping.WrapWholeWords
+                });
+            }
+
+            if (claude.IsChecked == true) addPreviewLine("Claude", claudeCommandBox.Text.Trim());
+            if (codex.IsChecked == true) addPreviewLine("Codex", codexCommandBox.Text.Trim());
+            if (gemini.IsChecked == true) addPreviewLine("Gemini", geminiCommandBox.Text.Trim());
+
+            foreach (var (titleBox, commandBox, _) in customCommandRows)
+            {
+                var title = titleBox.Text.Trim();
+                var command = commandBox.Text.Trim();
+                if (!string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(command))
+                    addPreviewLine(title, command);
+            }
+
+            addPreviewLine("Blank", string.Empty);
+        }
+
+        void addCustomCommandRow(string title = "", string command = "")
+        {
+            var titleBox = new TextBox { Text = title, PlaceholderText = "Title, e.g. Aider" };
+            var commandBox = new TextBox { Text = command, PlaceholderText = "Command, e.g. aider" };
+            var removeButton = new Button
+            {
+                Content = "Remove",
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            var rowContent = new StackPanel { Spacing = 6 };
+            rowContent.Children.Add(Labeled("Title", titleBox));
+            rowContent.Children.Add(Labeled("Command", commandBox));
+            rowContent.Children.Add(removeButton);
+
+            var row = new Border
+            {
+                BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x49, 0x48, 0x3e)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10),
+                Child = rowContent
+            };
+
+            customCommandRows.Add((titleBox, commandBox, row));
+            customCommandsPanel.Children.Add(row);
+
+            titleBox.TextChanged += (_, _) => RefreshPreview();
+            commandBox.TextChanged += (_, _) => RefreshPreview();
+            removeButton.Click += (_, _) =>
+            {
+                customCommandsPanel.Children.Remove(row);
+                customCommandRows.RemoveAll(item => ReferenceEquals(item.Row, row));
+                RefreshPreview();
+            };
+
+            RefreshPreview();
+        }
+
+        addCustomCommandButton.Click += (_, _) => addCustomCommandRow();
+        foreach (var command in current.CustomTerminalCommands ?? new List<CustomTerminalCommand>())
+            addCustomCommandRow(command.Title, command.Command);
+        claude.Checked += (_, _) => RefreshPreview();
+        claude.Unchecked += (_, _) => RefreshPreview();
+        codex.Checked += (_, _) => RefreshPreview();
+        codex.Unchecked += (_, _) => RefreshPreview();
+        gemini.Checked += (_, _) => RefreshPreview();
+        gemini.Unchecked += (_, _) => RefreshPreview();
+        claudeCommandBox.TextChanged += (_, _) => RefreshPreview();
+        codexCommandBox.TextChanged += (_, _) => RefreshPreview();
+        geminiCommandBox.TextChanged += (_, _) => RefreshPreview();
+        RefreshPreview();
+
         var content = new StackPanel { Spacing = 12 };
         content.Children.Add(new TextBlock
         {
@@ -213,6 +301,10 @@ public sealed partial class WorkspaceSidebar : UserControl
         content.Children.Add(Labeled("Claude launch", claudeCommandBox));
         content.Children.Add(Labeled("Codex launch", codexCommandBox));
         content.Children.Add(Labeled("Gemini launch", geminiCommandBox));
+        content.Children.Add(new TextBlock { Text = "Custom commands", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 0) });
+        content.Children.Add(customCommandsPanel);
+        content.Children.Add(addCustomCommandButton);
+        content.Children.Add(Labeled("Launch chooser preview", previewPanel));
 
         content.Children.Add(new TextBlock { Text = "Notifications", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 0) });
         content.Children.Add(Labeled("Waiting scope", notificationScopeBox));
@@ -258,6 +350,14 @@ public sealed partial class WorkspaceSidebar : UserControl
         current.ClaudeLaunchCommand = string.IsNullOrWhiteSpace(claudeCommandBox.Text) ? "claude --dangerously-skip-permissions" : claudeCommandBox.Text.Trim();
         current.CodexLaunchCommand = string.IsNullOrWhiteSpace(codexCommandBox.Text) ? "codex --yolo" : codexCommandBox.Text.Trim();
         current.GeminiLaunchCommand = string.IsNullOrWhiteSpace(geminiCommandBox.Text) ? "gemini --yolo" : geminiCommandBox.Text.Trim();
+        current.CustomTerminalCommands = customCommandRows
+            .Select(row => new CustomTerminalCommand
+            {
+                Title = row.TitleBox.Text.Trim(),
+                Command = row.CommandBox.Text.Trim()
+            })
+            .Where(command => !string.IsNullOrWhiteSpace(command.Title) && !string.IsNullOrWhiteSpace(command.Command))
+            .ToList();
         current.WaitingNotificationScope = notificationScopeBox.SelectedItem is NotificationScope scope ? scope : NotificationScope.AllTabs;
         current.WaitingNotificationDurationSeconds = Math.Clamp((int)Math.Round(durationBox.Value), 1, 60);
         current.TerminalFontSize = Math.Clamp(fontSizeBox.Value, 8, 32);
