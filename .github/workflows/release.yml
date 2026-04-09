@@ -39,10 +39,10 @@ jobs:
         run: dotnet build gmux.sln --configuration Release --no-restore
 
       - name: Publish App
-        run: dotnet publish src/Gmux.App/Gmux.App.csproj -c Release -r win-x64 --self-contained false -o artifacts/app
+        run: dotnet publish src/Gmux.App/Gmux.App.csproj -c Release -r win-x64 --self-contained false -o artifacts/app -p:Version=${{ steps.version.outputs.VERSION }} -p:AssemblyVersion=${{ steps.version.outputs.VERSION }}.0 -p:FileVersion=${{ steps.version.outputs.VERSION }}.0 -p:InformationalVersion=${{ steps.version.outputs.VERSION }}
 
       - name: Publish CLI
-        run: dotnet publish src/Gmux.Cli/Gmux.Cli.csproj -c Release -r win-x64 --self-contained false -o artifacts/cli
+        run: dotnet publish src/Gmux.Cli/Gmux.Cli.csproj -c Release -r win-x64 --self-contained false -o artifacts/cli -p:Version=${{ steps.version.outputs.VERSION }} -p:AssemblyVersion=${{ steps.version.outputs.VERSION }}.0 -p:FileVersion=${{ steps.version.outputs.VERSION }}.0 -p:InformationalVersion=${{ steps.version.outputs.VERSION }}
 
       - name: Install WiX Toolset
         run: dotnet tool install --global wix
