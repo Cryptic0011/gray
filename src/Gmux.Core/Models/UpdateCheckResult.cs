@@ -6,4 +6,7 @@ public record UpdateCheckResult(
     string CurrentVersion,
     string? LatestVersion,
     string? ReleaseUrl,
-    string Message);
+    string Message,
+    string? ReleaseNotes = null,
+    string? MsiAssetUrl = null,
+    long? MsiAssetSizeBytes = null);
