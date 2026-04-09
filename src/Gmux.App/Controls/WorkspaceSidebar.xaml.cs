@@ -184,6 +184,12 @@ public sealed partial class WorkspaceSidebar : UserControl
             TextWrapping = TextWrapping.WrapWholeWords,
             Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x75, 0x71, 0x5e))
         };
+        var releaseLink = new HyperlinkButton
+        {
+            Visibility = Visibility.Collapsed,
+            Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
         var checkUpdatesButton = new Button
         {
             Content = "Check for updates",
@@ -193,8 +199,16 @@ public sealed partial class WorkspaceSidebar : UserControl
         {
             checkUpdatesButton.IsEnabled = false;
             updateStatus.Text = "Checking GitHub releases...";
+            releaseLink.Visibility = Visibility.Collapsed;
+
             var result = await App.UpdateChecker.CheckForUpdatesAsync();
-            updateStatus.Text = result.Message + (string.IsNullOrWhiteSpace(result.ReleaseUrl) ? "" : $" {result.ReleaseUrl}");
+            updateStatus.Text = result.Message;
+            if (!string.IsNullOrWhiteSpace(result.ReleaseUrl))
+            {
+                releaseLink.Content = "Open release page";
+                releaseLink.NavigateUri = new Uri(result.ReleaseUrl);
+                releaseLink.Visibility = Visibility.Visible;
+            }
             checkUpdatesButton.IsEnabled = true;
         };
 
@@ -321,6 +335,7 @@ public sealed partial class WorkspaceSidebar : UserControl
         content.Children.Add(StatusLine("Gemini", geminiStatus));
         content.Children.Add(checkUpdatesButton);
         content.Children.Add(updateStatus);
+        content.Children.Add(releaseLink);
 
         var scrollViewer = new ScrollViewer
         {
