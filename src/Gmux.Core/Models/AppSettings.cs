@@ -16,6 +16,7 @@ public class AppSettings
     public int WaitingNotificationDurationSeconds { get; set; } = 5;
     public double TerminalFontSize { get; set; } = 14;
     public int ScrollbackSize { get; set; } = 5000;
+    public UpdatePreferences Updates { get; set; } = new();
 
     public IReadOnlyList<AgentCliKind> GetEnabledAgentClis()
     {
