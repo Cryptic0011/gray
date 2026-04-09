@@ -63,12 +63,14 @@ public class UpdateCheckerService
         }
     }
 
-    private static bool TryParseGitHubRepo(string? repoUrl, out string owner, out string repo)
+    internal static bool TryParseGitHubRepo(string? repoUrl, out string owner, out string repo)
     {
         owner = string.Empty;
         repo = string.Empty;
 
-        if (string.IsNullOrWhiteSpace(repoUrl) || !Uri.TryCreate(repoUrl, UriKind.Absolute, out var uri))
+        if (string.IsNullOrWhiteSpace(repoUrl))
+            return false;
+        if (!Uri.TryCreate(repoUrl, UriKind.Absolute, out var uri))
             return false;
         if (!string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
             return false;
@@ -81,8 +83,7 @@ public class UpdateCheckerService
         repo = segments[1].EndsWith(".git", StringComparison.OrdinalIgnoreCase)
             ? segments[1][..^4]
             : segments[1];
-        return !(owner.Contains("your-org", StringComparison.OrdinalIgnoreCase) ||
-                 repo.Contains("gray", StringComparison.OrdinalIgnoreCase) && repoUrl.Contains("your-org", StringComparison.OrdinalIgnoreCase));
+        return !string.IsNullOrEmpty(owner) && !string.IsNullOrEmpty(repo);
     }
 
     internal static Version NormalizeVersion(string? version)
