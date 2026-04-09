@@ -7,4 +7,8 @@
     <Platforms>x64;ARM64</Platforms>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Gmux.Core.Tests" />
+  </ItemGroup>
+
 </Project>
