@@ -13,6 +13,16 @@ The app supports:
 
 ## Install
 
+**Windows PowerShell one-liner:**
+
+    iwr https://raw.githubusercontent.com/Cryptic0011/gray/main/install.ps1 -UseBasicParsing | iex
+
+Or download the MSI directly from the [latest release](https://github.com/Cryptic0011/gray/releases/latest).
+
+Once installed, gray checks GitHub on launch and offers updates through an in-app banner. Updates run silently via the same MSI.
+
+> If Windows SmartScreen warns about the installer, click **More info → Run anyway**. Code signing is on the roadmap.
+
 ### Option 1: MSI installer
 
 Download `gray-installer-win-x64.msi` from the latest GitHub Release and run it.
