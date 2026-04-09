@@ -5,6 +5,7 @@ using Microsoft.UI.Windowing;
 using Gmux.Core.Models;
 using Gmux.Core.Services;
 using Gmux.App.Services;
+using Gmux.App.ViewModels;
 using WinRT.Interop;
 
 namespace Gmux.App;
@@ -12,6 +13,7 @@ namespace Gmux.App;
 public sealed partial class MainWindow : Window
 {
     private readonly SessionManager _sessionManager;
+    private UpdateBannerViewModel? _updateBannerViewModel;
     private readonly PaneFocusManager _focusManager = new();
     private AppWindow _appWindow = null!;
     private DispatcherTimer? _stateSaveTimer;
@@ -99,6 +101,38 @@ public sealed partial class MainWindow : Window
         // Keyboard shortcuts
         Content.KeyDown += OnGlobalKeyDown;
         Content.PreviewKeyDown += OnPreviewKeyDown;
+
+        _updateBannerViewModel = new UpdateBannerViewModel(
+            App.UpdateChecker,
+            App.UpdateDownloader,
+            App.UpdateInstaller,
+            App.SettingsManager,
+            dispatch: action =>
+            {
+                if (DispatcherQueue.HasThreadAccess)
+                {
+                    action();
+                    return Task.CompletedTask;
+                }
+                var tcs = new TaskCompletionSource();
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    try { action(); tcs.SetResult(); }
+                    catch (Exception ex) { tcs.SetException(ex); }
+                });
+                return tcs.Task;
+            },
+            exitAction: () => Microsoft.UI.Xaml.Application.Current.Exit());
+        UpdateBannerControl.ViewModel = _updateBannerViewModel;
+
+        Closed += OnClosed;
+
+        _ = _updateBannerViewModel.InitializeAsync();
+    }
+
+    private void OnClosed(object sender, WindowEventArgs args)
+    {
+        _updateBannerViewModel?.Dispose();
     }
 
     // --- Context Menu Handlers ---

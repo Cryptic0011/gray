@@ -28,6 +28,7 @@
         <Grid Grid.Column="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -105,8 +106,13 @@
                 </Grid>
             </Border>
 
+            <!-- Update banner -->
+            <controls:UpdateBanner
+                x:Name="UpdateBannerControl"
+                Grid.Row="1" />
+
             <!-- Terminal Pane Area -->
-            <Grid Grid.Row="1">
+            <Grid Grid.Row="2">
                 <controls:SplitPaneContainer
                     x:Name="PaneContainer" />
 

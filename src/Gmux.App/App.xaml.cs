@@ -13,6 +13,8 @@ public partial class App : Application
     public static NotificationService NotificationService { get; } = new();
     public static AgentMonitorService AgentMonitor { get; } = new();
     public static UpdateCheckerService UpdateChecker { get; } = new();
+    public static UpdateDownloadService UpdateDownloader { get; } = new();
+    public static UpdateInstallerService UpdateInstaller { get; } = new();
     public static PipeServer PipeServer { get; } = new();
     public static SessionManager? SessionManager { get; set; }
     public static Window? MainWindowInstance { get; private set; }
@@ -45,14 +47,6 @@ public partial class App : Application
             SessionManager.RequireDirectorySelection(firstPaneId.Value);
         }
 
-        _ = Task.Run(async () =>
-        {
-            var update = await UpdateChecker.CheckForUpdatesAsync();
-            if (update.IsUpdateAvailable)
-            {
-                NotificationService.Notify("gray", update.Message);
-            }
-        });
     }
 
     private async Task<IpcMessage> HandleIpcMessage(IpcMessage message)
