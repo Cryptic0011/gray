@@ -85,11 +85,18 @@ public class UpdateCheckerService
                  repo.Contains("gray", StringComparison.OrdinalIgnoreCase) && repoUrl.Contains("your-org", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static Version NormalizeVersion(string version)
+    internal static Version NormalizeVersion(string? version)
     {
+        if (string.IsNullOrWhiteSpace(version))
+            return new Version(0, 0, 0, 0);
+
         var trimmed = version.Trim();
         if (trimmed.StartsWith("v", StringComparison.OrdinalIgnoreCase))
             trimmed = trimmed[1..];
+
+        var cut = trimmed.IndexOfAny(new[] { '-', '+' });
+        if (cut >= 0)
+            trimmed = trimmed[..cut];
 
         return Version.TryParse(trimmed, out var parsed)
             ? parsed
