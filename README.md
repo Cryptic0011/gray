@@ -2,43 +2,53 @@
 
 Windows-first terminal multiplexer for agent CLIs such as Claude, Codex, and Gemini.
 
-## Current state
+## Features
 
-The app supports:
+gray supports:
 - workspaces, tabs, and split panes
 - configurable agent launchers for Claude / Codex / Gemini
 - waiting-state notifications for tracked agent panes
 - persisted settings and workspace state
-- GitHub release update checks
+- GitHub release update checks with in-app updates
 
 ## Install
 
-**Windows PowerShell one-liner:**
+gray currently targets Windows 10/11.
 
-    iwr https://raw.githubusercontent.com/Cryptic0011/gray/main/install.ps1 -UseBasicParsing | iex
+### Recommended: PowerShell one-liner
 
-Or download the MSI directly from the [latest release](https://github.com/Cryptic0011/gray/releases/latest).
+```powershell
+iwr https://raw.githubusercontent.com/Cryptic0011/gray/main/install.ps1 -UseBasicParsing | iex
+```
 
-Once installed, gray checks GitHub on launch and offers updates through an in-app banner. Updates run silently via the same MSI.
+This installs the latest GitHub release to `%LocalAppData%\Programs\gray`, adds `gray` to your user `PATH`, and creates a desktop shortcut.
 
-> If Windows SmartScreen warns about the installer, click **More info → Run anyway**. Code signing is on the roadmap.
+After install:
+- launch `gray` from the Start menu, desktop shortcut, or a new terminal
+- gray checks GitHub for updates on launch
+- updates install through the same MSI from an in-app banner
 
-### Option 1: MSI installer
+### Manual install: MSI
 
-Download `gray-installer-win-x64.msi` from the latest GitHub Release and run it.
+Download `gray-installer-win-x64.msi` from the [latest release](https://github.com/Cryptic0011/gray/releases/latest) and run it.
 
 The installer:
 - installs `gray` to `%LocalAppData%\Programs\gray`
 - creates a desktop shortcut
 - adds the install directory to user `PATH` so `gray` is available from a new shell
 
-### Option 2: Portable release
+### Portable downloads
 
 Download `gray-app-win-x64.zip` from GitHub Releases, extract it, and run `Gmux.App.exe`.
 
 If you only want the CLI without installing the full app, download `gray-cli-win-x64.zip`.
 
-### Option 3: Build from source
+### Notes
+
+- If Windows SmartScreen warns about the installer, click **More info -> Run anyway**.
+- `winget` packaging is prepared in this repo but is not published yet, so `winget install gray` is not available yet.
+
+## Build From Source
 
 Requirements:
 - Windows 10/11
@@ -65,10 +75,6 @@ Run the CLI:
 dotnet run --project src/Gmux.Cli/Gmux.Cli.csproj -- status
 ```
 
-### Option 4: winget
-
-`winget` packaging is planned, but this repo does not yet publish a winget manifest.
-
 ## Settings
 
 Open `Settings` from the sidebar to configure:
@@ -93,7 +99,26 @@ Before publishing to GitHub:
 2. Set the correct version in [Directory.Build.props](Directory.Build.props).
 3. Tag releases with semantic versions like `v0.1.0`.
 4. Push the tag to GitHub.
-5. Add a winget manifest if you want command-line installation.
+5. Refresh `packaging/winget/manifests/` from the release MSI and validate it with `winget validate`.
+6. Submit the manifest to `microsoft/winget-pkgs` if you want `winget install gray`.
+
+## Winget Packaging
+
+This repo includes a `winget` manifest generator under `packaging/winget/`.
+
+Generate or refresh manifests from the current MSI:
+
+```powershell
+pwsh -File packaging/winget/New-WingetManifest.ps1
+```
+
+Validate the generated manifest:
+
+```powershell
+winget validate --manifest packaging/winget/manifests/c/Cryptic0011/gray/0.1.0
+```
+
+The package is not published to the community `winget-pkgs` repo yet.
 
 ## Release automation
 

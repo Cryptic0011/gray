@@ -5,10 +5,21 @@ namespace Gmux.Core.Services;
 public class UpdateInstallerService : IUpdateInstallerService
 {
     private readonly string _appProcessName;
+    private readonly Func<string?> _currentExecutablePathProvider;
+    private readonly Action<string, string> _writeAllText;
+    private readonly Action<ProcessStartInfo> _startProcess;
 
-    public UpdateInstallerService(string appProcessName = "Gmux.App")
+    public UpdateInstallerService(
+        string appProcessName = "Gmux.App",
+        Func<string?>? currentExecutablePathProvider = null,
+        Action<string, string>? writeAllText = null,
+        Action<ProcessStartInfo>? startProcess = null)
     {
         _appProcessName = appProcessName;
+        _currentExecutablePathProvider = currentExecutablePathProvider
+            ?? (() => Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName);
+        _writeAllText = writeAllText ?? File.WriteAllText;
+        _startProcess = startProcess ?? (psi => Process.Start(psi));
     }
 
     public bool CanInstall(out string? reason)
@@ -31,14 +42,40 @@ public class UpdateInstallerService : IUpdateInstallerService
         var dir = Path.GetDirectoryName(msiPath) ?? Path.GetTempPath();
         var cmdPath = Path.Combine(dir, "updater.cmd");
         var msiFileName = Path.GetFileName(msiPath);
-        var installedExe = Path.Combine(
+        var installedExe = ResolveInstalledExePath();
+
+        var script = BuildUpdateScript(_appProcessName, msiFileName, installedExe);
+
+        _writeAllText(cmdPath, script);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = cmdPath,
+            UseShellExecute = true,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+        };
+        _startProcess(psi);
+
+        exitAction();
+    }
+
+    private string ResolveInstalledExePath()
+    {
+        var currentExecutablePath = _currentExecutablePathProvider();
+        if (!string.IsNullOrWhiteSpace(currentExecutablePath))
+            return currentExecutablePath;
+
+        return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Programs", "gray", "Gmux.App.exe");
+    }
 
-        var script = $$"""
+    internal static string BuildUpdateScript(string appProcessName, string msiFileName, string installedExe) =>
+        $$"""
             @echo off
             :wait
-            tasklist /fi "imagename eq {{_appProcessName}}.exe" 2>nul | find /i "{{_appProcessName}}.exe" >nul
+            tasklist /fi "imagename eq {{appProcessName}}.exe" 2>nul | find /i "{{appProcessName}}.exe" >nul
             if not errorlevel 1 (
               timeout /t 1 /nobreak >nul
               goto wait
@@ -50,18 +87,4 @@ public class UpdateInstallerService : IUpdateInstallerService
             )
             start "" "{{installedExe}}"
             """;
-
-        File.WriteAllText(cmdPath, script);
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = cmdPath,
-            UseShellExecute = true,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
-        };
-        Process.Start(psi);
-
-        exitAction();
-    }
 }

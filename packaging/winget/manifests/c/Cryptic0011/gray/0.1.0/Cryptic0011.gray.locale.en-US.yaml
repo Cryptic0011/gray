@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
+PackageIdentifier: Cryptic0011.gray
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Cryptic0011
+PublisherUrl: https://github.com/Cryptic0011
+PackageName: gray
+PackageUrl: https://github.com/Cryptic0011/gray
+License: Proprietary
+ShortDescription: Windows-first terminal multiplexer for agent CLIs such as Claude, Codex, and Gemini.
+Tags:
+- terminal
+- multiplexer
+- ai
+- claude
+- codex
+- gemini
+ManifestType: defaultLocale
+ManifestVersion: 1.12.0

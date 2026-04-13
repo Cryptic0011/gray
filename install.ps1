@@ -20,7 +20,8 @@
 param(
     [string]$Version = '',
     [switch]$KeepInstaller,
-    [switch]$WhatIf
+    [switch]$WhatIf,
+    [string]$ApiBaseUrl = 'https://api.github.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,17 +36,25 @@ function Write-Ok($msg)   { Write-Host "OK  $msg" -ForegroundColor Green }
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+    $apiBase = $ApiBaseUrl.TrimEnd('/')
+
     $apiUrl = if ([string]::IsNullOrWhiteSpace($Version)) {
-        "https://api.github.com/repos/$Owner/$Repo/releases/latest"
+        "$apiBase/repos/$Owner/$Repo/releases/latest"
     } else {
-        "https://api.github.com/repos/$Owner/$Repo/releases/tags/$Version"
+        "$apiBase/repos/$Owner/$Repo/releases/tags/$Version"
     }
 
     Write-Step "Resolving release from $apiUrl"
-    $release = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -Headers @{
+    $releaseResponse = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -Headers @{
         'User-Agent' = 'gray-installer'
         'Accept'     = 'application/vnd.github+json'
-    } | Select-Object -ExpandProperty Content | ConvertFrom-Json
+    }
+    $releaseContent = if ($releaseResponse.Content -is [byte[]]) {
+        [Text.Encoding]::UTF8.GetString($releaseResponse.Content)
+    } else {
+        [string]$releaseResponse.Content
+    }
+    $release = $releaseContent | ConvertFrom-Json
 
     $tag = $release.tag_name
     $asset = $release.assets | Where-Object { $_.name -eq $AssetName } | Select-Object -First 1

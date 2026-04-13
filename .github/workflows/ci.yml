@@ -41,9 +41,36 @@ jobs:
           }
           Write-Host "install.ps1: no issues"
 
-      - name: Smoke install.ps1 (WhatIf)
+      - name: Smoke install.ps1 against local release API
         shell: pwsh
-        continue-on-error: true
         run: |
-          pwsh -File install.ps1 -WhatIf
-        # continue-on-error because this will fail until the first release is cut.
+          $root = Join-Path $pwd 'mock-api'
+          $fixtureDir = Join-Path $root 'repos/Cryptic0011/gray/releases'
+          New-Item -ItemType Directory -Force -Path $fixtureDir | Out-Null
+          @'
+          {
+            "tag_name": "v0.2.0",
+            "assets": [
+              {
+                "name": "gray-installer-win-x64.msi",
+                "browser_download_url": "https://example.test/gray-installer-win-x64.msi"
+              }
+            ]
+          }
+          '@ | Set-Content -Path (Join-Path $fixtureDir 'latest')
+
+          $server = Start-Process python -ArgumentList @('-m', 'http.server', '8765', '--bind', '127.0.0.1', '--directory', $root) -PassThru
+          Start-Sleep -Seconds 1
+
+          try {
+            $output = pwsh -File install.ps1 -WhatIf -ApiBaseUrl 'http://127.0.0.1:8765' | Out-String
+            if ($output -notmatch 'gray-installer-win-x64\.msi') {
+              Write-Error "install.ps1 output did not mention the MSI asset URL.`n$output"
+            }
+          }
+          finally {
+            if ($server -and -not $server.HasExited) {
+              Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
+          }
